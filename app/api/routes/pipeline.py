@@ -15,7 +15,7 @@ import structlog
 from app.models.database import get_db_session
 from app.models.entities import CollectionRun
 from app.scheduling.scheduler import _harvest_lock
-from app.services.pipeline import PipelineService
+from app.services.pipeline import PipelineService, pipeline_tracker
 
 logger = structlog.get_logger()
 
@@ -64,6 +64,7 @@ async def trigger_harvest(
             return result
         except asyncio.CancelledError:
             logger.info("Harvest endpoint run cancelled by stop request", source=payload.source_id)
+            pipeline_tracker.reset(status="STOPPED", message="Harvest run cancelled by user.")
             try:
                 stmt = (
                     select(CollectionRun)
@@ -112,6 +113,7 @@ async def trigger_matrix_harvest(
             return result
         except asyncio.CancelledError:
             logger.info("Matrix harvest run cancelled by stop request")
+            pipeline_tracker.reset(status="STOPPED", message="Matrix harvest run cancelled by user.")
             try:
                 stmt = (
                     select(CollectionRun)
@@ -144,6 +146,8 @@ async def stop_active_harvest(
     """Cancel any active in-flight harvest pipeline run."""
     global _active_harvest_task
     stopped_task = False
+    pipeline_tracker.reset(status="STOPPED", message="Harvest pipeline execution was stopped.")
+
     if _active_harvest_task and not _active_harvest_task.done():
         logger.info("Cancelling active harvest task via API stop request")
         _active_harvest_task.cancel()
@@ -172,6 +176,36 @@ async def stop_active_harvest(
     return {"status": "IDLE", "message": "No active harvest run to stop."}
 
 
+@router.get("/status")
+async def get_pipeline_status(
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Return real-time active stage telemetry for in-flight harvest runs."""
+    status_data = pipeline_tracker.to_dict()
+    if not status_data["is_active"]:
+        stmt = (
+            select(CollectionRun)
+            .where(CollectionRun.status == "RUNNING")
+            .order_by(desc(CollectionRun.started_at))
+            .limit(1)
+        )
+        active_db_run = (await session.execute(stmt)).scalar_one_or_none()
+        if active_db_run:
+            step = 3 if active_db_run.jobs_found > 0 else 1
+            stage_name = "Canonical Deduplication" if step == 3 else "Endpoint Handshake"
+            status_data.update({
+                "is_active": True,
+                "run_id": active_db_run.id,
+                "step": step,
+                "stage_name": stage_name,
+                "stage_detail": f"Active harvest for {active_db_run.source_id}",
+                "source_id": active_db_run.source_id,
+                "jobs_found": active_db_run.jobs_found,
+                "status": "RUNNING",
+            })
+    return status_data
+
+
 @router.get("/runs")
 async def list_runs(
     limit: int = 20,
@@ -185,6 +219,23 @@ async def list_runs(
     )
     result = await session.execute(stmt)
     runs = result.scalars().all()
+
+    status_data = pipeline_tracker.to_dict()
+    if not status_data["is_active"]:
+        active_db_run = next((r for r in runs if r.status == "RUNNING"), None)
+        if active_db_run:
+            step = 3 if active_db_run.jobs_found > 0 else 1
+            stage_name = "Canonical Deduplication" if step == 3 else "Endpoint Handshake"
+            status_data.update({
+                "is_active": True,
+                "run_id": active_db_run.id,
+                "step": step,
+                "stage_name": stage_name,
+                "stage_detail": f"Active harvest for {active_db_run.source_id}",
+                "source_id": active_db_run.source_id,
+                "jobs_found": active_db_run.jobs_found,
+                "status": "RUNNING",
+            })
 
     return {
         "runs": [
@@ -201,5 +252,6 @@ async def list_runs(
                 "error_summary": r.error_summary,
             }
             for r in runs
-        ]
+        ],
+        "active_stage": status_data,
     }

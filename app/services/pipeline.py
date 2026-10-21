@@ -43,6 +43,86 @@ from app.verification.verifier import verify_job
 logger = structlog.get_logger()
 
 
+class PipelineStageTracker:
+    """Thread/asyncio-safe in-memory tracker for active pipeline stage."""
+
+    def __init__(self):
+        self.is_active: bool = False
+        self.run_id: Optional[str] = None
+        self.step: int = 0
+        self.stage_name: str = "Idle"
+        self.stage_detail: str = ""
+        self.source_id: str = ""
+        self.company_name: str = ""
+        self.jobs_found: int = 0
+        self.jobs_processed: int = 0
+        self.total_jobs: int = 0
+        self.status: str = "IDLE"
+
+    def set_stage(
+        self,
+        step: Optional[int] = None,
+        stage_name: Optional[str] = None,
+        stage_detail: Optional[str] = None,
+        run_id: Optional[str] = None,
+        source_id: Optional[str] = None,
+        company_name: Optional[str] = None,
+        jobs_found: Optional[int] = None,
+        jobs_processed: Optional[int] = None,
+        total_jobs: Optional[int] = None,
+        status: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ):
+        if is_active is not None:
+            self.is_active = is_active
+        if run_id is not None:
+            self.run_id = run_id
+        if step is not None:
+            self.step = step
+        if stage_name is not None:
+            self.stage_name = stage_name
+        if stage_detail is not None:
+            self.stage_detail = stage_detail
+        if source_id is not None:
+            self.source_id = source_id
+        if company_name is not None:
+            self.company_name = company_name
+        if jobs_found is not None:
+            self.jobs_found = jobs_found
+        if jobs_processed is not None:
+            self.jobs_processed = jobs_processed
+        if total_jobs is not None:
+            self.total_jobs = total_jobs
+        if status is not None:
+            self.status = status
+
+    def reset(self, status: str = "IDLE", message: str = ""):
+        self.is_active = False
+        self.status = status
+        self.stage_detail = message
+        if status == "SUCCESS":
+            self.step = 5
+            self.stage_name = "Canonical Storage & Telemetry"
+
+    def to_dict(self) -> dict:
+        return {
+            "is_active": self.is_active,
+            "run_id": self.run_id,
+            "step": self.step,
+            "stage_name": self.stage_name,
+            "stage_detail": self.stage_detail,
+            "source_id": self.source_id,
+            "company_name": self.company_name,
+            "jobs_found": self.jobs_found,
+            "jobs_processed": self.jobs_processed,
+            "total_jobs": self.total_jobs,
+            "status": self.status,
+        }
+
+
+pipeline_tracker = PipelineStageTracker()
+
+
 class PipelineService:
     """Central orchestration service coordinating collectors, processing, and persistence."""
 
@@ -116,6 +196,20 @@ class PipelineService:
         self.session.add(run)
         await self.session.commit()
 
+        pipeline_tracker.set_stage(
+            is_active=True,
+            run_id=run.id,
+            step=1,
+            stage_name="Endpoint Handshake",
+            stage_detail=f"Routing to {source_id} for {company_name}",
+            source_id=source_id,
+            company_name=company_name,
+            status="RUNNING",
+            jobs_found=0,
+            jobs_processed=0,
+            total_jobs=0,
+        )
+
         logger.info(
             "Executing harvest pipeline",
             source=source_id,
@@ -133,12 +227,24 @@ class PipelineService:
                 company_source_id=company_source_id,
             )
             run.jobs_found = len(raw_ingests)
+            pipeline_tracker.set_stage(
+                step=2,
+                stage_name="Payload Ingestion & Normalization",
+                stage_detail=f"Extracting structured roles from {len(raw_ingests)} listings",
+                jobs_found=len(raw_ingests),
+                total_jobs=len(raw_ingests),
+            )
         except Exception as exc:
             logger.error("Collection failed", error=str(exc))
             run.status = "FAILED"
             run.error_summary = str(exc)
             run.finished_at = datetime.now(timezone.utc)
             await self.session.commit()
+            pipeline_tracker.set_stage(
+                is_active=False,
+                status="FAILED",
+                stage_detail=str(exc),
+            )
             return {"status": "FAILED", "error": str(exc), "run_id": run.id}
 
         # 4. Fetch existing canonical jobs for deduplication
@@ -156,8 +262,14 @@ class PipelineService:
         jobs_failed = 0
 
         # 5. Process each raw job through the pipeline
-        for raw_item in raw_ingests:
+        for idx, raw_item in enumerate(raw_ingests):
             try:
+                pipeline_tracker.set_stage(
+                    step=3,
+                    stage_name="Canonical Deduplication",
+                    stage_detail=f"Deduplicating listing {idx + 1}/{len(raw_ingests)}",
+                    jobs_processed=idx + 1,
+                )
                 # A. Persist / update immutable RawJob
                 content_hash = calculate_content_hash(raw_item.raw_payload)
                 raw_stmt = select(RawJob).where(
@@ -189,6 +301,13 @@ class PipelineService:
 
                 # B. Normalize
                 norm_job = normalize_raw_job(raw_item)
+
+                pipeline_tracker.set_stage(
+                    step=4,
+                    stage_name="Agency & Spam Verification",
+                    stage_detail=f"Verifying placement integrity {idx + 1}/{len(raw_ingests)}",
+                    jobs_processed=idx + 1,
+                )
 
                 # C. Verification
                 verif_result: VerificationResult = verify_job(norm_job)
@@ -346,6 +465,16 @@ class PipelineService:
         run.status = "SUCCESS" if jobs_failed == 0 else "PARTIAL"
         await self.session.commit()
 
+        pipeline_tracker.set_stage(
+            step=5,
+            stage_name="Canonical Storage & Telemetry",
+            stage_detail=f"Harvest complete. {jobs_created} new listings, {jobs_updated} refreshed.",
+            is_active=False,
+            status=run.status,
+            jobs_found=run.jobs_found,
+            jobs_processed=len(raw_ingests),
+        )
+
         logger.info(
             "Harvest pipeline completed",
             found=run.jobs_found,
@@ -386,6 +515,14 @@ class PipelineService:
             sources=active_sources,
             target_count=len(active_targets),
             cities=active_cities,
+        )
+
+        pipeline_tracker.set_stage(
+            is_active=True,
+            step=1,
+            stage_name="Endpoint Handshake",
+            stage_detail=f"Starting search matrix harvest across {len(active_sources)} platforms...",
+            status="RUNNING",
         )
 
         for target in active_targets:
@@ -433,6 +570,14 @@ class PipelineService:
                             error=str(exc),
                         )
                         total_failed += 1
+
+        pipeline_tracker.set_stage(
+            step=5,
+            stage_name="Canonical Storage & Telemetry",
+            stage_detail=f"Matrix harvest completed. Discovered {total_found} listings across {runs_executed} runs.",
+            is_active=False,
+            status="SUCCESS" if total_failed == 0 else "PARTIAL",
+        )
 
         return {
             "status": "SUCCESS" if total_failed == 0 else "PARTIAL",

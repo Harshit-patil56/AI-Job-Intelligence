@@ -206,6 +206,11 @@ export default function HarvestStudioPage() {
   const [recentRuns, setRecentRuns] = React.useState<HarvestRunRecord[]>([]);
   const [isLoadingRuns, setIsLoadingRuns] = React.useState(false);
   const abortControllerRef = React.useRef<AbortController | null>(null);
+  // Gate: set true while a local submit fetch is in flight so the poller
+  // cannot interfere and loop steps backward.
+  const isLocallyRunningRef = React.useRef(false);
+  // Once we reach a terminal state we block further poller transitions.
+  const hasCompletedRef = React.useRef(false);
 
   // Responsive columns for CardGroup: columns > 1 activates 2-D fluid hover across rows and columns
   const [columns, setColumns] = React.useState<number>(3);
@@ -225,7 +230,7 @@ export default function HarvestStudioPage() {
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [])
 
   const fetchRecentRuns = React.useCallback(async () => {
     try {
@@ -233,10 +238,52 @@ export default function HarvestStudioPage() {
       const res = await fetch("/api/pipeline/runs?limit=8");
       if (!res.ok) throw new Error("Failed to load runs");
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setRecentRuns(data);
-      } else if (Array.isArray(data.runs)) {
-        setRecentRuns(data.runs);
+      const runs = Array.isArray(data) ? data : data.runs || [];
+      setRecentRuns(runs);
+
+      // --- Do NOT touch executionStep if a local fetch is in flight or we're done ---
+      if (isLocallyRunningRef.current) return;
+      if (hasCompletedRef.current) return;
+
+      const activeStage = data.active_stage;
+      const latest = runs[0];
+      const isRunning = latest?.status === "RUNNING" || activeStage?.is_active;
+
+      if (isRunning) {
+        // Continuity: keep Execution Status UI and Stop button alive across page refresh
+        setIsSubmitting(true);
+        setIsStepsOpen(true);
+        if (latest?.source_id) {
+          setSelectedSource(latest.source_id);
+        }
+        // Step moves forward-only from the real backend stage.
+        // Cap at 4: step 5 only fires when the HTTP response arrives.
+        const backendStep = Math.min(activeStage?.step ?? (latest?.jobs_found > 0 ? 3 : 1), 4);
+        setExecutionStep((prev) => Math.max(prev, backendStep));
+      } else if (latest && latest.status !== "RUNNING") {
+        setExecutionStep((prev) => {
+          // Only transition to terminal state if we were already tracking a run
+          if (prev > 0 && !hasCompletedRef.current) {
+            hasCompletedRef.current = true;
+            setIsSubmitting(false);
+            if (latest.status === "SUCCESS" || latest.status === "PARTIAL") {
+              setResult({
+                success: true,
+                jobs_found: latest.jobs_found,
+                jobs_created: latest.jobs_created,
+                jobs_updated: latest.jobs_updated,
+                run_id: latest.id,
+                message: `Harvest run complete: ${latest.jobs_found ?? 0} jobs found, ${latest.jobs_created ?? 0} new listings created, ${latest.jobs_updated ?? 0} refreshed.`,
+              });
+            } else if (latest.status === "STOPPED") {
+              setResult({ success: false, message: "Harvest pipeline execution was stopped by user." });
+            } else {
+              setResult({ success: false, message: latest.error_summary || "Harvest pipeline encountered an error." });
+            }
+            return 5;
+          }
+          return prev;
+        });
       }
     } catch (err) {
       console.warn("Could not retrieve telemetry runs:", err);
@@ -247,6 +294,8 @@ export default function HarvestStudioPage() {
 
   React.useEffect(() => {
     fetchRecentRuns();
+    const pollInterval = setInterval(fetchRecentRuns, 2000);
+    return () => clearInterval(pollInterval);
   }, [fetchRecentRuns]);
 
   const handleSourceSelect = (sourceId: string, sampleToken: string) => {
@@ -319,6 +368,10 @@ export default function HarvestStudioPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Gate poller so it does not interfere while we own the state
+    isLocallyRunningRef.current = true;
+    hasCompletedRef.current = false;
+
     setIsSubmitting(true);
     setIsStopping(false);
     setResult(null);
@@ -327,9 +380,21 @@ export default function HarvestStudioPage() {
 
     abortControllerRef.current = new AbortController();
 
-    const stepInterval = setInterval(() => {
-      setExecutionStep((prev) => (prev < 4 ? prev + 1 : prev));
-    }, 1300);
+    // Poll backend for real stage — steps only move FORWARD, capped at 4
+    // while the fetch is still in flight (step 5 = only set on actual response).
+    const stagePollInterval = setInterval(async () => {
+      try {
+        const r = await fetch("/api/pipeline/runs?limit=1");
+        if (!r.ok) return;
+        const d = await r.json();
+        const stage = d.active_stage;
+        if (stage?.step) {
+          // Cap at 4: step 5 only lights up when the top-level fetch resolves.
+          const cappedStep = Math.min(stage.step, 4);
+          setExecutionStep((prev) => Math.max(prev, cappedStep));
+        }
+      } catch { /* ignore */ }
+    }, 1500);
 
     try {
       const isMatrix = selectedSource === "MATRIX";
@@ -380,24 +445,24 @@ export default function HarvestStudioPage() {
         run_id: data.run_id,
       });
 
+      hasCompletedRef.current = true;
       setExecutionStep(5);
       fetchRecentRuns();
     } catch (err: unknown) {
+      hasCompletedRef.current = true;
       if (err instanceof DOMException && err.name === "AbortError") {
         setResult({
           success: false,
           message: "Harvest pipeline execution was stopped by user.",
         });
-        return;
+      } else {
+        const msg = err instanceof Error ? err.message : String(err);
+        setResult({ success: false, message: msg });
       }
-      const msg = err instanceof Error ? err.message : String(err);
-      setResult({
-        success: false,
-        message: msg,
-      });
     } finally {
-      clearInterval(stepInterval);
+      clearInterval(stagePollInterval);
       setIsSubmitting(false);
+      isLocallyRunningRef.current = false;
     }
   };
 
@@ -719,10 +784,24 @@ export default function HarvestStudioPage() {
                       </Badge>
                     )}
                   </div>
-                  {isSubmitting ? (
-                    <Badge color="blue" size="compact" variant="dot">
-                      Harvesting
-                    </Badge>
+                  <div className="flex items-center gap-2">
+                    {isSubmitting && (
+                      <Button
+                        variant="ghost"
+                        size="compact"
+                        type="button"
+                        onClick={handleStop}
+                        disabled={isStopping}
+                        className="h-6 px-2 text-[11px] font-medium text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 cursor-pointer"
+                        title="Stop active harvest execution"
+                      >
+                        {isStopping ? "Stopping..." : "Stop"}
+                      </Button>
+                    )}
+                    {isSubmitting ? (
+                      <Badge color="blue" size="compact" variant="dot">
+                        Harvesting
+                      </Badge>
                   ) : result?.message?.includes("stopped") ? (
                     <Badge color="amber" size="compact" variant="dot">
                       Stopped
@@ -740,6 +819,7 @@ export default function HarvestStudioPage() {
                       Standby
                     </Badge>
                   )}
+                  </div>
                 </div>
 
                 {/* 1. Fluid Functionalism ThinkingIndicator with Morphing SVG Infinity Loop & Shimmer Text */}

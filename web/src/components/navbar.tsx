@@ -117,13 +117,13 @@ export function Navbar({
               <span className="hidden sm:inline">Telemetry</span>
             </Button>
 
-            {/* Harvest Trigger: opens dedicated /harvest studio in a separate tab */}
+            {/* Harvest Trigger: opens HarvestDialog modal */}
             <Button
               variant="primary"
               size="compact"
-              render={<a href="/harvest" target="_blank" rel="noopener noreferrer" />}
-              className="h-7 w-7 sm:w-auto p-0 sm:px-3 text-xs shrink-0 flex items-center justify-center"
-              title="Open Ingestion Studio in separate tab"
+              onClick={onOpenHarvest}
+              className="h-7 w-7 sm:w-auto p-0 sm:px-3 text-xs shrink-0 flex items-center justify-center cursor-pointer shadow-xs"
+              title="Trigger ingestion harvest"
             >
               <HugeiconsIcon icon={Rocket01Icon} size={14} className="sm:hidden" />
               <span className="hidden sm:inline">Trigger Harvest</span>

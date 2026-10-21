@@ -7,6 +7,7 @@ import { JobGrid } from "@/components/job-grid";
 import { JobGridSkeleton } from "@/components/job-card-skeleton";
 import { RunsDialog } from "@/components/runs-dialog";
 import { SettingsDialog } from "@/components/dialog-sidebar/settings-dialog";
+import { HarvestDialog } from "@/components/harvest-dialog";
 import {
   Pagination,
   PaginationContent,
@@ -56,6 +57,7 @@ export default function HomePage() {
   });
   const [isRunsOpen, setIsRunsOpen] = React.useState(false);
   const [isProfileOpen, setIsProfileOpen] = React.useState(false);
+  const [isHarvestOpen, setIsHarvestOpen] = React.useState(false);
 
   // Sync initial page, company, and filter states from URL query string
   React.useEffect(() => {
@@ -394,6 +396,7 @@ export default function HomePage() {
         onSearchChange={handleSearchChange}
         onOpenRuns={() => setIsRunsOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
+        onOpenHarvest={() => setIsHarvestOpen(true)}
         totalJobs={stats.total}
       />
 
@@ -536,6 +539,16 @@ export default function HomePage() {
       <SettingsDialog
         open={isProfileOpen}
         onOpenChange={setIsProfileOpen}
+      />
+
+      <HarvestDialog
+        open={isHarvestOpen}
+        onOpenChange={setIsHarvestOpen}
+        onHarvestSuccess={() => {
+          fetchStats();
+          fetchFacets();
+          fetchJobs(currentPage);
+        }}
       />
     </div>
   );
