@@ -1,0 +1,595 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-hover: var(--hover);
+  --color-active: var(--active);
+  --color-selected: var(--selected);
+  --color-destructive-light: var(--destructive-light);
+  --color-tint-hover: var(--tint-hover);
+  --color-tint: var(--tint);
+  --color-focus-ring: var(--focus-ring);
+  --overlay: var(--overlay);
+  --text-display: var(--fs-display);
+  --text-display--line-height: var(--lh-display);
+  --text-title: var(--fs-title);
+  --text-title--line-height: var(--lh-title);
+  --text-subtitle: var(--fs-subtitle);
+  --text-subtitle--line-height: var(--lh-subtitle);
+  --text-body: var(--fs-body);
+  --text-body--line-height: var(--lh-body);
+  --text-caption: var(--fs-caption);
+  --text-caption--line-height: var(--lh-caption);
+  --text-micro: var(--fs-micro);
+  --text-micro--line-height: var(--lh-micro);
+  --lh-micro-compact: var(--lh-micro-compact);
+  --fs-micro-compact: var(--fs-micro-compact);
+  --lh-micro: var(--lh-micro);
+  --fs-micro: var(--fs-micro);
+  --lh-caption-compact: var(--lh-caption-compact);
+  --fs-caption-compact: var(--fs-caption-compact);
+  --lh-caption: var(--lh-caption);
+  --fs-caption: var(--fs-caption);
+  --lh-body-compact: var(--lh-body-compact);
+  --fs-body-compact: var(--fs-body-compact);
+  --lh-body: var(--lh-body);
+  --fs-body: var(--fs-body);
+  --lh-subtitle-compact: var(--lh-subtitle-compact);
+  --fs-subtitle-compact: var(--fs-subtitle-compact);
+  --lh-subtitle: var(--lh-subtitle);
+  --fs-subtitle: var(--fs-subtitle);
+  --lh-title-compact: var(--lh-title-compact);
+  --fs-title-compact: var(--fs-title-compact);
+  --lh-title: var(--lh-title);
+  --fs-title: var(--fs-title);
+  --lh-display-compact: var(--lh-display-compact);
+  --fs-display-compact: var(--fs-display-compact);
+  --lh-display: var(--lh-display);
+  --fs-display: var(--fs-display);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
+  --color-surface-5: var(--surface-5);
+  --color-surface-6: var(--surface-6);
+  --color-surface-7: var(--surface-7);
+  --color-surface-8: var(--surface-8);
+  --shadow-surface-1: var(--shadow-1);
+  --shadow-surface-2: var(--shadow-2);
+  --shadow-surface-3: var(--shadow-3);
+  --shadow-surface-4: var(--shadow-4);
+  --shadow-surface-5: var(--shadow-5);
+  --shadow-surface-6: var(--shadow-6);
+  --shadow-surface-7: var(--shadow-7);
+  --shadow-surface-8: var(--shadow-8);
+  --color-dm-drop: var(--dm-drop);
+  --color-dm-ring-high: var(--dm-ring-high);
+  --color-dm-ring-mid: var(--dm-ring-mid);
+  --color-dm-ring-base: var(--dm-ring-base);
+  --color-dm-hi-peak: var(--dm-hi-peak);
+  --color-dm-hi-high: var(--dm-hi-high);
+  --color-dm-hi-mid: var(--dm-hi-mid);
+  --color-dm-hi-base: var(--dm-hi-base);
+  --shadow-8: var(--shadow-8);
+  --shadow-7: var(--shadow-7);
+  --shadow-6: var(--shadow-6);
+  --shadow-5: var(--shadow-5);
+  --shadow-4: var(--shadow-4);
+  --shadow-3: var(--shadow-3);
+  --shadow-2: var(--shadow-2);
+  --shadow-1: var(--shadow-1);
+  --color-shadow-color: var(--shadow-color);
+  @keyframes spinner-move {
+  to {
+    stroke-dashoffset: -100;
+    }
+  }
+  @keyframes spinner-dash {
+  0%, 100% {
+    stroke-dasharray: 15 85;
+    }
+  50% {
+    stroke-dasharray: 40 60;
+    }
+  }
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes shimmer-sweep {
+    0% {
+      background-position: 0% 0;
+    }
+    100% {
+      background-position: 100% 0;
+    }
+  }
+  @keyframes sf-reveal-start {
+  from {
+    --sf-start: 1;
+    }
+  to {
+    --sf-start: 0;
+    }
+  }
+  @keyframes sf-reveal-end {
+  from {
+    --sf-end: 0;
+    }
+  to {
+    --sf-end: 1;
+    }
+  }
+  @keyframes sf-divider-start {
+  from {
+    opacity: 0;
+    }
+  to {
+    opacity: 1;
+    }
+  }
+  @keyframes sf-divider-end {
+  from {
+    opacity: 1;
+    }
+  to {
+    opacity: 0;
+    }
+  }
+}
+
+@utility shimmer-text {
+  color: transparent !important;
+  background: linear-gradient(90deg, #71717a 0%, #71717a 35%, #18181b 50%, #71717a 65%, #71717a 100%);
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
+}
+
+:is(.dark) .shimmer-text {
+  background: linear-gradient(90deg, #a1a1aa 0%, #a1a1aa 35%, #ffffff 50%, #a1a1aa 65%, #a1a1aa 100%);
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+:root {
+  --background: #F3F2F0;
+  --foreground: #191919;
+  --card: #FFFFFF;
+  --card-foreground: #191919;
+  --popover: #FFFFFF;
+  --popover-foreground: #191919;
+  --primary: #0A66C2;
+  --primary-foreground: #FFFFFF;
+  --primary-hover: #004182;
+  --primary-subtle: #E8F3FF;
+  --secondary: #F3F2F0;
+  --secondary-foreground: #191919;
+  --muted: #EBEBEB;
+  --muted-foreground: #666666;
+  --accent: #E8F3FF;
+  --accent-foreground: #0A66C2;
+  --destructive: #CC1016;
+  --destructive-foreground: #FFFFFF;
+  --border: #E0DFDC;
+  --input: #E0DFDC;
+  --ring: #0A66C2;
+  --success: #057642;
+  --warning: #B24020;
+  --chart-1: #0A66C2;
+  --chart-2: #057642;
+  --chart-3: #B24020;
+  --chart-4: #666666;
+  --chart-5: #191919;
+  --radius: 0.5rem;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #191919;
+  --sidebar-primary: #0A66C2;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #E8F3FF;
+  --sidebar-accent-foreground: #0A66C2;
+  --sidebar-border: #E0DFDC;
+  --sidebar-ring: #0A66C2;
+  --hover: rgb(10 102 194 / 0.05);
+  --active: rgb(10 102 194 / 0.10);
+  --selected: #D0E8FF;
+  --destructive-light: #FCE8E6;
+  --overlay: 0 0 0;
+  --focus-ring: #0A66C2;
+  --tint: rgb(10 102 194 / 0.08);
+  --tint-hover: rgb(10 102 194 / 0.14);
+  --fs-display: 28px;
+  --lh-display: 34px;
+  --fs-display-compact: 24px;
+  --lh-display-compact: 30px;
+  --fs-title: 16px;
+  --lh-title: 22px;
+  --fs-title-compact: 15px;
+  --lh-title-compact: 20px;
+  --fs-subtitle: 14px;
+  --lh-subtitle: 20px;
+  --fs-subtitle-compact: 13px;
+  --lh-subtitle-compact: 18px;
+  --fs-body: 13px;
+  --lh-body: 20px;
+  --fs-body-compact: 12px;
+  --lh-body-compact: 18px;
+  --fs-caption: 12px;
+  --lh-caption: 16px;
+  --fs-caption-compact: 11px;
+  --lh-caption-compact: 14px;
+  --fs-micro: 11px;
+  --lh-micro: 14px;
+  --fs-micro-compact: 10px;
+  --lh-micro-compact: 12px;
+  --surface-1: #FAFAFA;
+  --surface-2: #FCFCFC;
+  --surface-3: #FFFFFF;
+  --surface-4: #FFFFFF;
+  --surface-5: #FFFFFF;
+  --surface-6: #FFFFFF;
+  --surface-7: #FFFFFF;
+  --surface-8: #FFFFFF;
+  --shadow-color: rgb(0 0 0 / 0.06);
+  --shadow-1: 0 0 0 1px var(--shadow-color);
+  --shadow-2: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color);
+  --shadow-3: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color), 0 3px 3px -1.5px var(--shadow-color);
+  --shadow-4: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color), 0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color);
+  --shadow-5: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color), 0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color), 0 12px 12px -6px var(--shadow-color);
+  --shadow-6: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color), 0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color), 0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color);
+  --shadow-7: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color), 0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color), 0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color), 0 48px 48px -24px var(--shadow-color);
+  --shadow-8: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color), 0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color), 0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color), 0 48px 48px -24px var(--shadow-color), 0 96px 96px -48px var(--shadow-color);
+}
+
+.dark {
+  --background: #1B1F23;
+  --foreground: #F0F6FC;
+  --card: #24292E;
+  --card-foreground: #F0F6FC;
+  --popover: #24292E;
+  --popover-foreground: #F0F6FC;
+  --primary: #70B5F9;
+  --primary-foreground: #1B1F23;
+  --primary-hover: #98CAFC;
+  --primary-subtle: rgba(112, 181, 249, 0.15);
+  --secondary: #24292E;
+  --secondary-foreground: #F0F6FC;
+  --muted: #2F363D;
+  --muted-foreground: #8B949E;
+  --accent: rgba(112, 181, 249, 0.15);
+  --accent-foreground: #70B5F9;
+  --destructive: #F85149;
+  --destructive-foreground: #FFFFFF;
+  --border: #30363D;
+  --input: #30363D;
+  --ring: #70B5F9;
+  --success: #3FB950;
+  --warning: #D29922;
+  --chart-1: #70B5F9;
+  --chart-2: #3FB950;
+  --chart-3: #D29922;
+  --chart-4: #8B949E;
+  --chart-5: #F0F6FC;
+  --sidebar: #1F2428;
+  --sidebar-foreground: #F0F6FC;
+  --sidebar-primary: #70B5F9;
+  --sidebar-primary-foreground: #1B1F23;
+  --sidebar-accent: rgba(112, 181, 249, 0.15);
+  --sidebar-accent-foreground: #70B5F9;
+  --sidebar-border: #30363D;
+  --sidebar-ring: #70B5F9;
+  --hover: rgb(255 255 255 / 0.06);
+  --active: rgb(255 255 255 / 0.1);
+  --selected: #38414D;
+  --destructive-light: #450A0A;
+  --overlay: 255 255 255;
+  --tint: rgb(255 255 255 / 0.12);
+  --tint-hover: rgb(255 255 255 / 0.20);
+  --surface-1: #171717;
+  --surface-2: #1E1E1E;
+  --surface-3: #252525;
+  --surface-4: #2C2C2C;
+  --surface-5: #333333;
+  --surface-6: #3A3A3A;
+  --surface-7: #414141;
+  --surface-8: #484848;
+  --dm-hi-base: rgba(255,255,255,0.01);
+  --dm-hi-mid: rgba(255,255,255,0.02);
+  --dm-hi-high: rgba(255,255,255,0.04);
+  --dm-hi-peak: rgba(255,255,255,0.06);
+  --dm-ring-base: rgba(255,255,255,0.02);
+  --dm-ring-mid: rgba(255,255,255,0.04);
+  --dm-ring-high: rgba(255,255,255,0.06);
+  --dm-drop: rgba(0,0,0,0.18);
+  --shadow-1: inset 0 0 0 1px var(--dm-ring-base);
+  --shadow-2: inset 0 1px 0 0 var(--dm-hi-base), inset 0 0 0 1px var(--dm-ring-base), 0 1px 1px -0.5px var(--dm-drop);
+  --shadow-3: inset 0 1px 0 0 var(--dm-hi-mid), inset 0 0 0 1px var(--dm-ring-base), 0 0 0 1px rgba(0,0,0,0.12), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop);
+  --shadow-4: inset 0 1px 0 0 var(--dm-hi-mid), inset 0 0 0 1px var(--dm-ring-mid), 0 0 0 1px rgba(0,0,0,0.14), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop), 0 6px 6px -3px var(--dm-drop);
+  --shadow-5: inset 0 1px 0 0 var(--dm-hi-high), inset 0 0 0 1px var(--dm-ring-mid), 0 0 0 1px rgba(0,0,0,0.16), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop), 0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop);
+  --shadow-6: inset 0 1px 0 0 var(--dm-hi-high), inset 0 0 0 1px var(--dm-ring-high), 0 0 0 1px rgba(0,0,0,0.18), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop), 0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop), 0 24px 24px -12px var(--dm-drop);
+  --shadow-7: inset 0 1px 0 0 var(--dm-hi-peak), inset 0 0 0 1px var(--dm-ring-high), 0 0 0 1px rgba(0,0,0,0.20), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop), 0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop), 0 24px 24px -12px var(--dm-drop), 0 48px 48px -24px var(--dm-drop);
+  --shadow-8: inset 0 1px 0 0 var(--dm-hi-peak), inset 0 0 0 1px var(--dm-ring-high), 0 0 0 1px rgba(0,0,0,0.22), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop), 0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop), 0 24px 24px -12px var(--dm-drop), 0 48px 48px -24px var(--dm-drop), 0 96px 96px -48px var(--dm-drop);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  :focus-visible {
+    outline: 1px solid var(--focus-ring, #6B97FF);
+    outline-offset: 2px;
+    border-radius: var(--shape-input-radius, 8px);
+  }
+  a:focus-visible {
+    border-radius: 2px;
+  }
+}
+  html.transitioning *, html.transitioning *::before, html.transitioning *::after {
+    transition: border-radius 180ms ease-in-out, background-color 180ms ease-in-out, color 180ms ease-in-out, border-color 180ms ease-in-out, fill 180ms ease-in-out, stroke 180ms ease-in-out !important;
+}
+
+@utility bg-surface-1 { background-color: var(--surface-1, #FAFAFA); }
+@utility bg-surface-2 { background-color: var(--surface-2, #FCFCFC); }
+@utility bg-surface-3 { background-color: var(--surface-3, #FFFFFF); }
+@utility bg-surface-4 { background-color: var(--surface-4, #FFFFFF); }
+@utility bg-surface-5 { background-color: var(--surface-5, #FFFFFF); }
+@utility bg-surface-6 { background-color: var(--surface-6, #FFFFFF); }
+@utility bg-surface-7 { background-color: var(--surface-7, #FFFFFF); }
+@utility bg-surface-8 { background-color: var(--surface-8, #FFFFFF); }
+
+@utility shadow-surface-1 { box-shadow: var(--shadow-1); }
+@utility shadow-surface-2 { box-shadow: var(--shadow-2); }
+@utility shadow-surface-3 { box-shadow: var(--shadow-3); }
+@utility shadow-surface-4 { box-shadow: var(--shadow-4); }
+@utility shadow-surface-5 { box-shadow: var(--shadow-5); }
+@utility shadow-surface-6 { box-shadow: var(--shadow-6); }
+@utility shadow-surface-7 { box-shadow: var(--shadow-7); }
+@utility shadow-surface-8 { box-shadow: var(--shadow-8); }
+
+/* Fluid Functionalism Scrollbars System */
+@property --sf-start {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --sf-end {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+@keyframes sf-reveal-start {
+  from {
+    --sf-start: 1;
+  }
+  to {
+    --sf-start: 0;
+  }
+}
+
+@keyframes sf-reveal-end {
+  from {
+    --sf-end: 0;
+  }
+  to {
+    --sf-end: 1;
+  }
+}
+
+.scroll-fade,
+.scroll-fade-x {
+  --scroll-fade-size: 48px;
+}
+
+@keyframes sf-divider-start {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sf-divider-end {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@supports (timeline-scope: --sf) {
+  .scroll-divider {
+    position: relative;
+    timeline-scope: --sf-scroller;
+    --scroll-divider-size: 48px;
+  }
+  .scroll-divider .scroll-fade {
+    scroll-timeline-name: --sf-scroller;
+  }
+  .scroll-divider::before,
+  .scroll-divider::after {
+    content: "";
+    position: absolute;
+    left: var(--scroll-divider-inset, 0px);
+    right: var(--scroll-divider-inset, 0px);
+    height: 1px;
+    background-color: var(--border);
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+  }
+  .scroll-divider::before {
+    top: 0;
+    animation: sf-divider-start both linear;
+    animation-timeline: --sf-scroller;
+    animation-range: 0 var(--scroll-divider-size);
+  }
+  .scroll-divider:first-child::before {
+    content: none;
+  }
+  .scroll-divider::after {
+    bottom: 0;
+    animation: sf-divider-end both linear;
+    animation-timeline: --sf-scroller;
+    animation-range: calc(100% - var(--scroll-divider-size)) 100%;
+  }
+  .scroll-divider::before, .scroll-divider::after {
+    content: "";
+    position: absolute;
+    left: var(--scroll-divider-inset, 0px);
+    right: var(--scroll-divider-inset, 0px);
+    height: 1px;
+    background-color: var(--border);
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+  }
+}
+
+@supports (animation-timeline: scroll()) {
+  .scroll-fade {
+    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, var(--sf-start)) 0, #000 var(--scroll-fade-size), #000 calc(100% - var(--scroll-fade-size)), rgba(0, 0, 0, var(--sf-end)) 100%);
+    -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, var(--sf-start)) 0, #000 var(--scroll-fade-size), #000 calc(100% - var(--scroll-fade-size)), rgba(0, 0, 0, var(--sf-end)) 100%);
+    animation: sf-reveal-start both linear, sf-reveal-end both linear;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range-start: 0, calc(100% - var(--scroll-fade-size));
+    animation-range-end: var(--scroll-fade-size), 100%;
+  }
+  .scroll-fade-x {
+    mask-image: linear-gradient(to right, rgba(0, 0, 0, var(--sf-start)) 0, #000 var(--scroll-fade-size), #000 calc(100% - var(--scroll-fade-size)), rgba(0, 0, 0, var(--sf-end)) 100%);
+    -webkit-mask-image: linear-gradient(to right, rgba(0, 0, 0, var(--sf-start)) 0, #000 var(--scroll-fade-size), #000 calc(100% - var(--scroll-fade-size)), rgba(0, 0, 0, var(--sf-end)) 100%);
+    animation: sf-reveal-start both linear, sf-reveal-end both linear;
+    animation-timeline: scroll(self inline), scroll(self inline);
+    animation-range-start: 0, calc(100% - var(--scroll-fade-size));
+    animation-range-end: var(--scroll-fade-size), 100%;
+  }
+}
+
+@media (pointer: fine) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--overlay) / 0.08) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-button {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent !important;
+    margin: 10px 0;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent !important;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--overlay) / 0.08);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:vertical {
+    border-left-width: 1px;
+    border-right-width: 5px;
+  }
+  ::-webkit-scrollbar-thumb:horizontal {
+    border-top-width: 1px;
+    border-bottom-width: 5px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--overlay) / 0.12);
+  }
+  ::-webkit-scrollbar-thumb:active {
+    background-color: rgb(var(--overlay) / 0.16);
+  }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+  @property --sf-start {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 1;
+}
+  @property --sf-end {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 1;
+}
+  .scroll-fade, .scroll-fade-x {
+    --scroll-fade-size: 48px;
+}
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
