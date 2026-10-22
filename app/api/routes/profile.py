@@ -5,7 +5,7 @@ target role preferences, and full resume text for personalized Copilot tailoring
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -128,11 +128,17 @@ async def update_candidate_profile(
     if payload.resume_text is not None:
         profile.resume_text = payload.resume_text
     if payload.portfolio_url is not None:
-        profile.portfolio_url = payload.portfolio_url
+        from app.services.resume_parser import normalize_portfolio_url
+        norm_pf = normalize_portfolio_url(payload.portfolio_url)
+        profile.portfolio_url = norm_pf or (payload.portfolio_url.strip() if payload.portfolio_url.strip() else None)
     if payload.github_url is not None:
-        profile.github_url = payload.github_url
+        from app.services.resume_parser import normalize_github_url
+        norm_gh = normalize_github_url(payload.github_url)
+        profile.github_url = norm_gh or (payload.github_url.strip() if payload.github_url.strip() else None)
     if payload.linkedin_url is not None:
-        profile.linkedin_url = payload.linkedin_url
+        from app.services.resume_parser import normalize_linkedin_url
+        norm_li = normalize_linkedin_url(payload.linkedin_url)
+        profile.linkedin_url = norm_li or (payload.linkedin_url.strip() if payload.linkedin_url.strip() else None)
 
     await session.commit()
     await session.refresh(profile)
@@ -151,3 +157,72 @@ async def update_candidate_profile(
         github_url=profile.github_url,
         linkedin_url=profile.linkedin_url,
     )
+
+
+class ParsedResumeResponse(BaseModel):
+    full_name: str
+    headline: str
+    target_roles: List[str]
+    preferred_locations: List[str]
+    skills: List[str]
+    github_url: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
+    resume_text: str
+    extraction_mode: str
+
+
+class ParseResumeTextRequest(BaseModel):
+    resume_text: str
+    prefer_llm: bool = True
+
+
+@router.post("/parse-text", response_model=ParsedResumeResponse)
+async def parse_resume_text_endpoint(
+    payload: ParseResumeTextRequest,
+):
+    """Parse raw resume text/markdown and extract structured candidate profile data."""
+    from app.services.resume_parser import parse_resume_content
+    result = await parse_resume_content(payload.resume_text, prefer_llm=payload.prefer_llm)
+    return ParsedResumeResponse(**result)
+
+
+@router.post("/upload-resume", response_model=ParsedResumeResponse)
+async def upload_resume_file_endpoint(
+    file: UploadFile = File(...),
+):
+    """Extract and parse structured candidate profile from uploaded PDF or text resume."""
+    from app.services.resume_parser import extract_text_from_pdf, parse_resume_content
+
+    filename = (file.filename or "").lower()
+    content = await file.read()
+
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    extracted_text = ""
+    extracted_uris: List[str] = []
+    if filename.endswith(".pdf"):
+        try:
+            from app.services.resume_parser import extract_text_and_links_from_pdf
+            extracted_text, extracted_uris = extract_text_and_links_from_pdf(content)
+        except Exception as exc:
+            logger.error("Failed to extract text from PDF", error=str(exc))
+            raise HTTPException(status_code=400, detail=f"Failed to extract text from PDF resume: {str(exc)}")
+    else:
+        # Plain text, markdown, or text-based documents
+        try:
+            extracted_text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                extracted_text = content.decode("latin-1")
+            except Exception:
+                raise HTTPException(status_code=400, detail="Could not decode text file.")
+
+    if not extracted_text.strip():
+        raise HTTPException(status_code=400, detail="No readable text could be extracted from the uploaded document.")
+
+    from app.services.resume_parser import parse_resume_content
+    result = await parse_resume_content(extracted_text, uris=extracted_uris, prefer_llm=True)
+    return ParsedResumeResponse(**result)
+

@@ -22,6 +22,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { fontWeights } from "@/lib/font-weight";
 import { TagCombobox } from "@/components/ui/tag-combobox";
 import { Code2, Briefcase, MapPin } from "lucide-react";
+import { GitHubLogoIcon, LinkedInLogoIcon } from "@/components/ui/brand-icons";
 
 interface ProfileDialogProps {
   open: boolean;
@@ -203,8 +204,8 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
                     type="text"
                     value={profile.headline}
                     onChange={(e) => setProfile({ ...profile, headline: e.target.value })}
-                    className="w-full h-8 sm:h-9 px-3 rounded-lg border border-border bg-secondary/30 text-xs text-foreground focus:border-primary focus:outline-none"
-                    placeholder="e.g. AI / GenAI & Backend Engineer"
+                    className="w-full h-8 sm:h-9 px-3 rounded-lg border border-border bg-secondary/30 text-xs text-foreground focus:border-primary focus:outline-none placeholder:text-muted-foreground/45 placeholder:italic placeholder:select-none dark:placeholder:text-zinc-500/70"
+                    placeholder="e.g. AI / GenAI & Backend Systems Engineer"
                   />
                 </div>
               </div>
@@ -222,30 +223,36 @@ export function ProfileDialog({ open, onOpenChange }: ProfileDialogProps) {
                   rows={10}
                   value={profile.resume_text}
                   onChange={(e) => setProfile({ ...profile, resume_text: e.target.value })}
-                  placeholder="Paste your resume markdown, bullet points, past projects, and technology achievements..."
-                  className="w-full p-3 rounded-lg border border-border bg-secondary/20 text-xs text-foreground focus:border-primary focus:outline-none font-mono leading-relaxed"
+                  placeholder="e.g. Paste your resume markdown, bullet points, past projects, and technology achievements..."
+                  className="w-full p-3 rounded-lg border border-border bg-secondary/20 text-xs text-foreground focus:border-primary focus:outline-none font-mono leading-relaxed placeholder:text-muted-foreground/45 placeholder:italic placeholder:select-none dark:placeholder:text-zinc-500/70"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">GitHub Profile URL</label>
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1">
+                    <GitHubLogoIcon size={14} className="text-muted-foreground" />
+                    <span>GitHub Profile URL</span>
+                  </label>
                   <input
                     type="text"
                     value={profile.github_url || ""}
                     onChange={(e) => setProfile({ ...profile, github_url: e.target.value })}
-                    className="w-full h-8 sm:h-9 px-3 rounded-lg border border-border bg-secondary/30 text-xs text-foreground focus:border-primary focus:outline-none"
-                    placeholder="https://github.com/..."
+                    className="w-full h-8 sm:h-9 px-3 rounded-lg border border-border bg-secondary/30 text-xs text-foreground focus:border-primary focus:outline-none placeholder:text-muted-foreground/45 placeholder:italic placeholder:select-none dark:placeholder:text-zinc-500/70"
+                    placeholder="e.g. https://github.com/your-username"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">LinkedIn Profile URL</label>
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1">
+                    <LinkedInLogoIcon size={14} className="text-muted-foreground" />
+                    <span>LinkedIn Profile URL</span>
+                  </label>
                   <input
                     type="text"
                     value={profile.linkedin_url || ""}
                     onChange={(e) => setProfile({ ...profile, linkedin_url: e.target.value })}
-                    className="w-full h-8 sm:h-9 px-3 rounded-lg border border-border bg-secondary/30 text-xs text-foreground focus:border-primary focus:outline-none"
-                    placeholder="https://linkedin.com/in/..."
+                    className="w-full h-8 sm:h-9 px-3 rounded-lg border border-border bg-secondary/30 text-xs text-foreground focus:border-primary focus:outline-none placeholder:text-muted-foreground/45 placeholder:italic placeholder:select-none dark:placeholder:text-zinc-500/70"
+                    placeholder="e.g. https://linkedin.com/in/your-profile-name"
                   />
                 </div>
               </div>

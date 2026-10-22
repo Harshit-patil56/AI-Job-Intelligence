@@ -2,76 +2,127 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
+// Official Logo.dev credentials from environment
 const PUBLIC_TOKEN =
-  process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN || "pk_Y4dZPtzsQeCVhx0WuHzfpw";
+  process.env.LOGO_DEV_PUBLIC_KEY ||
+  process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN ||
+  "pk_Y4dZPtzsQeCVhx0WuHzfpw";
 
-const KNOWN_DOMAINS: Record<string, string> = {
-  canonical: "canonical.com",
-  ramp: "ramp.com",
-  "ramp advisory llc": "ramp.com",
-  postman: "postman.com",
-  stripe: "stripe.com",
-  openai: "openai.com",
-  razorpay: "razorpay.com",
-  uber: "uber.com",
-  swiggy: "swiggy.com",
-  zomato: "zomato.com",
-  zepto: "zeptonow.com",
-  cred: "cred.club",
-  flipkart: "flipkart.com",
-  phonepe: "phonepe.com",
-  meesho: "meesho.com",
-  groww: "groww.in",
-  zerodha: "zerodha.com",
-  ola: "olacabs.com",
-  browserstack: "browserstack.com",
-  inmobi: "inmobi.com",
-  dream11: "dream11.com",
-  atlassian: "atlassian.com",
-  google: "google.com",
-  microsoft: "microsoft.com",
-  meta: "meta.com",
-  amazon: "amazon.com",
-  apple: "apple.com",
-  github: "github.com",
-  gitlab: "gitlab.com",
-  figma: "figma.com",
-  linear: "linear.app",
-  vercel: "vercel.com",
-};
+const SECRET_KEY =
+  process.env.LOGO_DEV_SECRET_KEY ||
+  "sk_dhpuIc5hTiuM8yeA7DWwqA";
+
+// Generic job aggregators whose domains must NEVER be treated as the employer's domain
+const JOB_PORTAL_HOSTS = [
+  "linkedin.com",
+  "indeed.com",
+  "glassdoor.com",
+  "naukri.com",
+  "cutshort.io",
+  "hirist.tech",
+  "instahyre.com",
+  "wellfound.com",
+  "greenhouse.io",
+  "lever.co",
+  "ashbyhq.com",
+  "workday.com",
+  "smartrecruiters.com",
+];
+
+// In-memory cache for ultra-low latency (<1ms) and deduplication
+const MEMORY_LOGO_CACHE = new Map<string, Buffer>();
+
+/**
+ * Locate persistent on-disk logo storage directory.
+ * Located at data/logos in project root, outside web/ to prevent Next.js HMR reload loops.
+ */
+function getLogosDir(): string {
+  const candidates = [
+    path.resolve(process.cwd(), "..", "data", "logos"),
+    path.resolve(process.cwd(), "data", "logos"),
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(dir)) return dir;
+  }
+  // Create candidate 1
+  try {
+    fs.mkdirSync(candidates[0], { recursive: true });
+    return candidates[0];
+  } catch {
+    fs.mkdirSync(candidates[1], { recursive: true });
+    return candidates[1];
+  }
+}
 
 function cleanSlug(name: string): string {
   return name
     .toLowerCase()
-    .replace(/\b(advisory|technologies|solutions|services|pvt|ltd|limited|inc|llc|corp|corporation|holdings|india|hq|group)\b/gi, "")
+    .replace(/^(jobspy|cutshort|hirist|instahyre|naukri|wellfound)\s*\([^)]*\)/gi, "")
+    .replace(/\b(advisory|technologies|solutions|services|pvt|ltd|limited|inc|llc|corp|corporation|holdings|india|hq|group|software)\b/gi, "")
     .trim()
     .replace(/[^a-z0-9]/g, "");
 }
 
-async function tryFetchImage(url: string): Promise<Buffer | null> {
+async function tryFetchBuffer(url: string, headers: Record<string, string> = {}): Promise<Buffer | null> {
   try {
     const res = await fetch(url, {
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(3500),
       headers: {
         Accept: "image/*,*/*",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        ...headers,
       },
     });
-
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") || "";
     if (!contentType.includes("image") && !contentType.includes("octet-stream")) {
       return null;
     }
-
     const arrayBuffer = await res.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    // Ignore placeholder 1x1 or empty images
     if (buffer.length < 250) return null;
     return buffer;
   } catch {
     return null;
   }
+}
+
+/**
+ * Dynamically discover the real corporate domain via Logo.dev search API.
+ * Avoids any hardcoding — discovers official company domain automatically.
+ */
+async function discoverDomainWithLogoDev(companyName: string): Promise<string | null> {
+  try {
+    const cleanName = companyName
+      .replace(/^(jobspy|cutshort|hirist|instahyre|naukri|wellfound)\s*\([^)]*\)/gi, "")
+      .replace(/\b(advisory|technologies|solutions|services|pvt|ltd|limited|inc|llc|corp|corporation|holdings|india|hq|group)\b/gi, "")
+      .trim();
+
+    if (!cleanName || cleanName.length < 2) return null;
+
+    const query = encodeURIComponent(cleanName);
+    const searchUrl = `https://api.logo.dev/search?q=${query}`;
+
+    const res = await fetch(searchUrl, {
+      signal: AbortSignal.timeout(3000),
+      headers: {
+        Authorization: `Bearer ${SECRET_KEY}`,
+        Accept: "application/json",
+      },
+    });
+
+    if (!res.ok) return null;
+    const items = await res.json();
+    if (Array.isArray(items) && items.length > 0 && items[0]?.domain) {
+      const d = String(items[0].domain).toLowerCase().trim().replace(/^www\./, "");
+      if (d && !JOB_PORTAL_HOSTS.some((p) => d.includes(p))) {
+        return d;
+      }
+    }
+  } catch {
+    // Search lookup timeout or error
+  }
+  return null;
 }
 
 export async function GET(request: NextRequest) {
@@ -88,64 +139,113 @@ export async function GET(request: NextRequest) {
     return new NextResponse("Invalid slug", { status: 400 });
   }
 
-  const domain =
-    domainParam ||
-    KNOWN_DOMAINS[slug] ||
-    KNOWN_DOMAINS[company.toLowerCase()] ||
-    `${slug}.com`;
+  // 1. Fast in-memory cache check (<1ms)
+  if (MEMORY_LOGO_CACHE.has(slug)) {
+    const cached = MEMORY_LOGO_CACHE.get(slug)!;
+    if (cached.length === 0) {
+      return new NextResponse("Logo not found", { status: 404 });
+    }
+    return new NextResponse(new Uint8Array(cached), {
+      status: 200,
+      headers: {
+        "Content-Type": "image/png",
+        "Cache-Control": "public, max-age=604800, immutable",
+        "X-Logo-Cache": "HIT-MEMORY",
+      },
+    });
+  }
 
-  const logosDir = path.join(process.cwd(), "public", "logos");
-  const localFilePath = path.join(logosDir, `${slug}.png`);
-
-  // 1. Check local persistent disk storage first (0ms, 0 external API calls)
+  // 2. Persistent on-disk storage check (data/logos/<slug>.png)
+  const logosDir = getLogosDir();
+  const filePath = path.join(logosDir, `${slug}.png`);
   try {
-    if (fs.existsSync(localFilePath)) {
-      const cachedBuffer = await fs.promises.readFile(localFilePath);
-      return new NextResponse(new Uint8Array(cachedBuffer), {
+    if (fs.existsSync(filePath)) {
+      const diskBuffer = await fs.promises.readFile(filePath);
+      MEMORY_LOGO_CACHE.set(slug, diskBuffer);
+      return new NextResponse(new Uint8Array(diskBuffer), {
         status: 200,
         headers: {
           "Content-Type": "image/png",
-          "Cache-Control": "public, max-age=31536000, immutable",
-          "X-Logo-Cache": "HIT-LOCAL-DISK",
+          "Cache-Control": "public, max-age=604800, immutable",
+          "X-Logo-Cache": "HIT-DISK",
         },
       });
     }
   } catch {
-    // If disk read fails, proceed to network cascade
+    // Continue to network fetch on disk read failure
   }
 
-  // 2. Cascade through sources (executed only once per company, then served from disk forever)
+  // 3. Resolve real company domain dynamically (No Hardcoding)
+  let resolvedDomain: string | null = null;
+
+  // Case A: Domain passed as param and not a job aggregator host
+  if (domainParam && domainParam.includes(".")) {
+    const cleanParam = domainParam.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "").trim();
+    if (!JOB_PORTAL_HOSTS.some((p) => cleanParam.includes(p))) {
+      resolvedDomain = cleanParam;
+    }
+  }
+
+  // Case B: Company name itself contains a domain (e.g. Jerry.ai, Scan.com, Plato.so)
+  if (!resolvedDomain && company.includes(".")) {
+    const words = company.trim().split(/\s+/);
+    for (const w of words) {
+      if (w.includes(".") && !w.startsWith("http") && !JOB_PORTAL_HOSTS.some((p) => w.toLowerCase().includes(p))) {
+        resolvedDomain = w.toLowerCase().replace(/[^a-z0-9.-]/g, "").replace(/^\.+|\.+$/g, "");
+        break;
+      }
+    }
+  }
+
+  // Case C: Dynamic Logo.dev Search API discovery using Secret Key
+  if (!resolvedDomain) {
+    resolvedDomain = await discoverDomainWithLogoDev(company);
+  }
+
+  // Case D: Clean company heuristic fallback (e.g. elchemy -> elchemy.com)
+  if (!resolvedDomain && slug.length >= 3) {
+    resolvedDomain = `${slug}.com`;
+  }
+
+  if (!resolvedDomain) {
+    MEMORY_LOGO_CACHE.set(slug, Buffer.alloc(0));
+    return new NextResponse("Logo not found", { status: 404 });
+  }
+
+  // 4. Download real brand logo via Logo.dev API
   const candidateUrls = [
-    // Source A: Logo.dev (Official high-res non-circular square brand asset)
-    `https://img.logo.dev/${domain}?token=${PUBLIC_TOKEN}&size=80&format=png&retina=true`,
-    // Source B: Direct Apple Touch Icon from employer domain (square 180x180)
-    `https://${domain}/apple-touch-icon.png`,
+    // Source 1: High-res square brand logo from Logo.dev using user token
+    `https://img.logo.dev/${resolvedDomain}?token=${PUBLIC_TOKEN}&size=128&format=png&retina=true`,
+    // Source 2: Direct Apple Touch Icon (high-res square icon from corporate site)
+    `https://${resolvedDomain}/apple-touch-icon.png`,
+    // Source 3: Google Favicon CDN (128px)
+    `https://www.google.com/s2/favicons?domain=${resolvedDomain}&sz=128`,
   ];
 
-  for (const candidateUrl of candidateUrls) {
-    const imageBuffer = await tryFetchImage(candidateUrl);
-    if (imageBuffer) {
-      // 3. Persist to disk so it NEVER needs to be fetched again
+  for (const url of candidateUrls) {
+    const buffer = await tryFetchBuffer(url);
+    if (buffer && buffer.length >= 250) {
+      // 5. Store on disk permanently so we reuse it again and again
       try {
-        if (!fs.existsSync(logosDir)) {
-          fs.mkdirSync(logosDir, { recursive: true });
-        }
-        await fs.promises.writeFile(localFilePath, imageBuffer);
-      } catch (err) {
-        console.error("Failed to persist logo to disk:", err);
+        await fs.promises.writeFile(filePath, buffer);
+      } catch {
+        // Disk write error ignored
       }
+      // Store in memory cache
+      MEMORY_LOGO_CACHE.set(slug, buffer);
 
-      return new NextResponse(new Uint8Array(imageBuffer), {
+      return new NextResponse(new Uint8Array(buffer), {
         status: 200,
         headers: {
           "Content-Type": "image/png",
-          "Cache-Control": "public, max-age=31536000, immutable",
-          "X-Logo-Cache": "MISS-SAVED-TO-DISK",
+          "Cache-Control": "public, max-age=604800, immutable",
+          "X-Logo-Cache": "MISS-STORED",
         },
       });
     }
   }
 
-  // If all candidates fail, return 404
+  // Negative cache so we don't spam the network repeatedly for non-existent brands
+  MEMORY_LOGO_CACHE.set(slug, Buffer.alloc(0));
   return new NextResponse("Logo not found", { status: 404 });
 }

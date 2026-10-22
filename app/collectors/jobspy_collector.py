@@ -18,27 +18,29 @@ logger = structlog.get_logger()
 
 
 class JobSpyCollector(BaseCollector):
-    """Aggregator collector utilizing JobSpy for broad Indian tech job discovery."""
+    """Aggregator collector utilizing JobSpy for broad Indian tech job discovery, primarily LinkedIn."""
 
     def __init__(
         self,
+        source_id: str = "LINKEDIN",
+        name: str = "LinkedIn Jobs via JobSpy",
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
         sites: Optional[List[str]] = None,
     ):
         super().__init__(
-            source_id="JOBSPY",
-            name="JobSpy Multi-Board Scraper",
-            timeout=timeout,
-            max_retries=max_retries,
+            source_id=source_id,
+            name=name,
+            timeout=timeout or 35.0,
+            max_retries=max_retries or 2,
         )
-        self.sites = sites or ["indeed", "linkedin", "glassdoor"]
+        self.sites = sites or ["linkedin"]
 
     def _sync_scrape(
         self,
         search_term: str,
         location: str,
-        results_wanted: int = 15,
+        results_wanted: int = 10,
         hours_old: int = 120,
     ) -> List[Dict[str, Any]]:
         """Synchronous wrapper for JobSpy scrape_jobs."""
@@ -91,7 +93,7 @@ class JobSpyCollector(BaseCollector):
         self,
         search_term: str,
         location: str,
-        results_wanted: int = 15,
+        results_wanted: int = 10,
         hours_old: int = 120,
         company_source_id: Optional[str] = None,
     ) -> List[RawJobIngest]:
@@ -135,7 +137,7 @@ class JobSpyCollector(BaseCollector):
 
         for row in records:
             job_id = str(row.get("id") or row.get("job_url"))
-            site = str(row.get("site") or "jobspy").upper()
+            site = str(row.get("site") or "linkedin").upper()
             comp_name = str(row.get("company") or "Unknown Company")
             job_url = str(row.get("job_url") or "")
             app_url = str(row.get("job_url_direct") or job_url)
@@ -172,7 +174,7 @@ class JobSpyCollector(BaseCollector):
             }
 
             ingest = RawJobIngest(
-                source_id=site,  # e.g. INDEED, LINKEDIN, GLASSDOOR
+                source_id=self.source_id,  # e.g. LINKEDIN or JOBSPY
                 company_source_id=company_source_id,
                 company_name=comp_name,
                 source_job_id=job_id,

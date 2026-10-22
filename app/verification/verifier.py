@@ -16,7 +16,21 @@ from urllib.parse import urlparse
 
 from app.models.schemas import NormalizedJob, VerificationResult
 
-KNOWN_SOURCES = {"GREENHOUSE", "LEVER", "ASHBY", "HIRIST", "JOBSPY", "CAREER_PAGE"}
+KNOWN_SOURCES = {
+    "GREENHOUSE",
+    "LEVER",
+    "ASHBY",
+    "HIRIST",
+    "JOBSPY",
+    "CUTSHORT",
+    "INSTAHYRE",
+    "NAUKRI",
+    "WELLFOUND",
+    "GLASSDOOR",
+    "LINKEDIN",
+    "INDEED",
+    "CAREER_PAGE",
+}
 
 
 def is_valid_url(url: str | None) -> bool:

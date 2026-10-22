@@ -27,6 +27,7 @@ import { FluidActionButton } from "@/components/fluid-action-button";
 import { Badge } from "@/components/ui/badge";
 import { PipelineStatusSelector, getStatusBadgeProps } from "@/components/motion/pipeline-status";
 import { Sparkles, RefreshCw, Copy, Check, FileText, Send, HelpCircle, CheckCircle2, ExternalLink } from "lucide-react";
+import { isValidCompanyWebsite } from "@/lib/urls";
 
 interface JobDetailDialogProps {
   job: JobItem | null;
@@ -177,6 +178,11 @@ export function JobDetailDialog({
   const isP2 = current.role_priority === "P2";
   const isVerified = current.verification_confidence >= 0.9;
   const compName = current.company?.name || current.company_name || "Company";
+  const compWebsite = detail?.company?.website || (current as any)?.company_website;
+  const hasValidWebsite = isValidCompanyWebsite(compWebsite, compName);
+  const compIndustry = detail?.company?.sector || (current as any)?.company_sector || "Software & Technology";
+  const rawModel = detail?.company?.business_model || (current as any)?.company_business_model || "PRODUCT";
+  const compModel = rawModel === "SERVICES" ? "IT Services" : rawModel === "BOTH" ? "Hybrid Product / Services" : "Product Company";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -192,6 +198,7 @@ export function JobDetailDialog({
             <CompanyAvatar
               companyName={compName}
               applicationUrl={current.application_url}
+              companyWebsite={hasValidWebsite ? compWebsite : undefined}
               size="lg"
             />
 
@@ -205,9 +212,23 @@ export function JobDetailDialog({
                     <HugeiconsIcon icon={CheckmarkCircle01Icon} size={15} strokeWidth={2.5} />
                   </span>
                 )}
+                {hasValidWebsite && compWebsite && (
+                  <a
+                    href={compWebsite.startsWith("http") ? compWebsite : `https://${compWebsite}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded bg-[#F3F2F0] hover:bg-[#E8F3FF] dark:bg-[#30363D] dark:hover:bg-[#1F6FEB]/20 px-2 py-0.5 text-[11px] font-medium text-[#0A66C2] dark:text-[#70B5F9] transition-colors"
+                    title={`Visit ${compName} official website`}
+                  >
+                    <span>{compWebsite.replace(/^https?:\/\/(www\.)?/, "").replace(/\/.*$/, "")}</span>
+                    <ExternalLink className="size-2.5" />
+                  </a>
+                )}
               </div>
-              <div className="text-xs text-[#666666] dark:text-[#8B949E] mt-0.5">
-                Canonical ID: <code className="font-mono text-[11px]">{current.id.slice(0, 8)}</code>
+              <div className="flex items-center gap-2 text-xs text-[#666666] dark:text-[#8B949E] mt-0.5">
+                <span>{compIndustry}</span>
+                <span>•</span>
+                <span className="font-medium text-[#191919] dark:text-[#F0F6FC]">{compModel}</span>
               </div>
             </div>
           </div>
@@ -296,6 +317,50 @@ export function JobDetailDialog({
                 <HugeiconsIcon icon={Layers01Icon} size={15} className="shrink-0" />
                 <span>{current.sources_count || 1} ATS Ingestion</span>
               </div>
+            </div>
+          </div>
+
+          {/* Employer Profile & Corporate Intelligence Card */}
+          <div className="rounded-xl border border-[#E0DFDC] bg-white p-4.5 shadow-2xs dark:border-[#30363D] dark:bg-[#24292E] space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <CompanyAvatar
+                  companyName={compName}
+                  applicationUrl={current.application_url}
+                  companyWebsite={hasValidWebsite ? compWebsite : undefined}
+                  size="md"
+                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-[#191919] dark:text-[#F0F6FC]">
+                      {compName}
+                    </h4>
+                    {isVerified && (
+                      <span className="inline-flex items-center gap-1 rounded bg-[#E6F4EA] dark:bg-[#057642]/20 px-2 py-0.5 text-[11px] font-semibold text-[#057642] dark:text-[#3FB950]">
+                        <HugeiconsIcon icon={CheckmarkCircle01Icon} size={13} strokeWidth={2.5} />
+                        Verified Employer
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-[#666666] dark:text-[#8B949E] mt-0.5">
+                    <span>{compIndustry}</span>
+                    <span>•</span>
+                    <span className="font-semibold text-[#191919] dark:text-[#F0F6FC]">{compModel}</span>
+                  </div>
+                </div>
+              </div>
+
+              {hasValidWebsite && compWebsite && (
+                <a
+                  href={compWebsite.startsWith("http") ? compWebsite : `https://${compWebsite}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-lg border border-[#E0DFDC] bg-[#F3F2F0]/80 hover:bg-[#E8F3FF] px-3 py-1.5 text-xs font-semibold text-[#0A66C2] dark:border-[#30363D] dark:bg-[#1F2428] dark:text-[#70B5F9] dark:hover:bg-[#30363D] transition-colors"
+                >
+                  <span>Company Website</span>
+                  <ExternalLink className="size-3" />
+                </a>
+              )}
             </div>
           </div>
 

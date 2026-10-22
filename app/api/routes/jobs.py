@@ -157,6 +157,9 @@ async def list_jobs(
             "application_url": j.application_url,
             "application_status": j.application_status or "NOT_APPLIED",
             "sources_count": len(j.source_references),
+            "company_website": j.company.website if j.company else None,
+            "company_sector": j.company.sector if j.company else None,
+            "company_business_model": j.company.business_model if j.company else None,
         })
 
     return {"total": total, "limit": limit, "offset": offset, "jobs": items}

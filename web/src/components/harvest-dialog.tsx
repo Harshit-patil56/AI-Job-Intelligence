@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import {
   ThinkingSteps,
   ThinkingStepsHeader,
@@ -54,6 +53,16 @@ export function HarvestDialog({
     jobs_updated?: number;
   } | null>(null);
 
+  // Live active stage telemetry from backend pipeline tracker
+  const [activeStageInfo, setActiveStageInfo] = React.useState<{
+    stage_name?: string;
+    stage_detail?: string;
+    source_id?: string;
+    company_name?: string;
+    jobs_found?: number;
+    status?: string;
+  } | null>(null);
+
   const abortControllerRef = React.useRef<AbortController | null>(null);
   // True while a local profile harvest fetch is in flight — prevents the
   // continuity poller from fighting the live fetch and looping steps backward.
@@ -76,6 +85,10 @@ export function HarvestDialog({
       const data = await res.json();
       const activeStage = data.active_stage;
       const latest = data.runs?.[0];
+
+      if (activeStage) {
+        setActiveStageInfo(activeStage);
+      }
 
       const isRunning = latest?.status === "RUNNING" || activeStage?.is_active;
 
@@ -182,14 +195,17 @@ export function HarvestDialog({
         if (!r.ok) return;
         const d = await r.json();
         const stage = d.active_stage;
-        if (stage?.step) {
-          // Cap at 4: step 5 (Canonical Storage) only lights up when the top-level
-          // fetch resolves, not when an intermediate sub-run reports completion.
-          const cappedStep = Math.min(stage.step, 4);
-          setExecutionStep((prev) => Math.max(prev, cappedStep));
+        if (stage) {
+          setActiveStageInfo(stage);
+          if (stage.step) {
+            // Cap at 4: step 5 (Canonical Storage) only lights up when the top-level
+            // fetch resolves, not when an intermediate sub-run reports completion.
+            const cappedStep = Math.min(stage.step, 4);
+            setExecutionStep((prev) => Math.max(prev, cappedStep));
+          }
         }
       } catch { /* ignore */ }
-    }, 1500);
+    }, 1200);
 
     try {
       const res = await fetch("/api/pipeline/harvest", {
@@ -197,7 +213,7 @@ export function HarvestDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           is_matrix: true,
-          sources: ["CUTSHORT", "HIRIST", "JOBSPY"],
+          sources: ["LINKEDIN", "NAUKRI", "WELLFOUND", "CUTSHORT", "HIRIST"],
           cities: targetCities,
         }),
         signal: abortControllerRef.current.signal,
@@ -236,6 +252,9 @@ export function HarvestDialog({
 
   const handleStopHarvest = async () => {
     hasCompletedRef.current = true;
+    setActiveStageInfo((prev) =>
+      prev ? { ...prev, status: "STOPPED", stage_detail: "Harvest pipeline execution stopped by user." } : null
+    );
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -267,7 +286,7 @@ export function HarvestDialog({
             <DialogHeader>
               <DialogTitle>Trigger job harvest</DialogTitle>
               <DialogDescription>
-                Do you want to harvest jobs according to the details entered in your profile section, or open advanced harvest?
+                Harvest new live opportunities from top portals (<strong className="text-foreground">LinkedIn</strong>, <strong className="text-foreground">Naukri</strong>, <strong className="text-foreground">Wellfound</strong>) prioritized first, followed by Cutshort and Hirist based on your candidate profile.
               </DialogDescription>
             </DialogHeader>
 
@@ -291,18 +310,23 @@ export function HarvestDialog({
           /* ─── Execution Status Modal (Kept alive across refreshes) ─────────── */
           <div className="flex flex-col space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-border/60">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm font-semibold text-foreground">
                   Execution status
                 </h3>
                 <Badge variant="solid" color="blue" size="compact">
                   Profile targets
                 </Badge>
+                {activeStageInfo?.source_id && isSubmitting && (
+                  <Badge variant="solid" color="purple" size="compact" className="font-mono text-[10px] tracking-wide">
+                    {activeStageInfo.source_id}
+                  </Badge>
+                )}
               </div>
 
               {isSubmitting ? (
                 <Badge color="blue" size="compact" variant="dot">
-                  Harvesting
+                  {activeStageInfo?.source_id ? `Harvesting ${activeStageInfo.source_id}` : "Harvesting"}
                 </Badge>
               ) : result?.message?.includes("stopped") ? (
                 <Badge color="amber" size="compact" variant="dot">
@@ -323,35 +347,14 @@ export function HarvestDialog({
               )}
             </div>
 
-            {/* Thinking Indicator */}
-            <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5">
-              <ThinkingIndicator
-                size="compact"
-                words={
-                  isSubmitting
-                    ? [
-                        "Querying profile target streams",
-                        "Parsing candidate roles and skills",
-                        "Deduplicating job listings",
-                        "Evaluating placement heuristics",
-                        "Committing records to database",
-                      ]
-                    : result?.message?.includes("stopped")
-                    ? ["Execution stopped by user", "Pipeline aborted cleanly"]
-                    : result?.success
-                    ? [
-                        "Harvest pipeline succeeded",
-                        `${result.jobs_found ?? 0} listings discovered`,
-                        `+${result.jobs_created ?? 0} new listings ingested`,
-                        `${result.jobs_updated ?? 0} postings refreshed`,
-                      ]
-                    : result
-                    ? ["Execution failed", "Pipeline encountered an error"]
-                    : ["Pipeline standby", "Awaiting execution launch"]
-                }
-                intervalMs={isSubmitting ? 2000 : 3500}
-              />
-            </div>
+            {!isSubmitting && result?.message?.includes("stopped") && (
+              <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in duration-150">
+                <div className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                <div className="flex-1 min-w-0 font-medium">
+                  Pipeline execution was stopped by user. All background workers and scrapers were halted.
+                </div>
+              </div>
+            )}
 
             {/* Pipeline Stages */}
             <div className="rounded-xl border border-border/70 bg-card p-4">
@@ -362,7 +365,11 @@ export function HarvestDialog({
                 <ThinkingStepsContent>
                   <ThinkingStep
                     label="Endpoint Handshake"
-                    description={`Routing to profile target streams (${targetCities.slice(0, 2).join(", ")})`}
+                    description={
+                      activeStageInfo?.company_name && executionStep === 1
+                        ? activeStageInfo.company_name
+                        : `Routing to profile target streams (${targetCities.slice(0, 3).join(", ")})`
+                    }
                     status={
                       isSubmitting
                         ? executionStep >= 1
@@ -381,7 +388,7 @@ export function HarvestDialog({
                     {(isSubmitting || result) && (
                       <ThinkingStepSources>
                         <ThinkingStepSource color="blue">
-                          Profile targets
+                          {activeStageInfo?.source_id || "Profile targets"}
                         </ThinkingStepSource>
                       </ThinkingStepSources>
                     )}
@@ -389,7 +396,11 @@ export function HarvestDialog({
 
                   <ThinkingStep
                     label="Payload Ingestion & Normalization"
-                    description="Extracting structured roles, compensation bands, and skills"
+                    description={
+                      activeStageInfo?.stage_detail && executionStep === 2
+                        ? activeStageInfo.stage_detail
+                        : "Extracting structured roles, compensation bands, and skills"
+                    }
                     status={
                       isSubmitting
                         ? executionStep > 2
@@ -547,14 +558,17 @@ export function HarvestDialog({
             <DialogFooter className="pt-2 flex items-center justify-between sm:justify-between">
               {isSubmitting ? (
                 <>
-                  <span className="text-xs text-muted-foreground animate-pulse">
-                    Harvesting in progress...
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0" />
+                    <span className="text-xs text-muted-foreground truncate">
+                      {activeStageInfo?.source_id ? `Harvesting ${activeStageInfo.source_id}...` : "Harvesting in progress..."}
+                    </span>
+                  </div>
                   <Button
                     variant="secondary"
                     size="compact"
                     onClick={handleStopHarvest}
-                    className="text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 cursor-pointer"
+                    className="text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 cursor-pointer shrink-0"
                   >
                     Stop harvest
                   </Button>

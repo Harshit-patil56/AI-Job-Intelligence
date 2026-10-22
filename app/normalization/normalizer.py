@@ -110,13 +110,23 @@ def normalize_raw_job(raw_job: RawJobIngest) -> NormalizedJob:
     canonical_title = re.sub(r"\s+", " ", title).strip()
     norm_title = normalize_title(canonical_title)
 
-    # Extract or clean company
-    company_name = (
-        raw_job.company_name
-        or raw_payload.get("company_name")
-        or raw_payload.get("company")
-        or "Unknown Company"
-    )
+    # Extract or clean company - prioritize payload's specific hiring employer over run-level aggregator tokens
+    payload_comp = str(raw_payload.get("company_name") or raw_payload.get("company") or "").strip()
+    run_comp = str(raw_job.company_name or "").strip()
+
+    def is_placeholder(name: str) -> bool:
+        low = name.lower()
+        return any(low.startswith(p) for p in ("jobspy (", "cutshort (", "hirist (", "naukri (", "instahyre (", "wellfound startups"))
+
+    if payload_comp and not is_placeholder(payload_comp):
+        company_name = payload_comp
+    elif run_comp and not is_placeholder(run_comp):
+        company_name = run_comp
+    else:
+        company_name = payload_comp or run_comp or "Unknown Company"
+
+    # Strip any residual aggregator tokens like "JobSpy (AI Engineer)"
+    company_name = re.sub(r"^(jobspy|cutshort|hirist|instahyre|naukri|wellfound)\s*\([^)]*\)", "", company_name, flags=re.IGNORECASE).strip() or company_name
     norm_company_name = normalize_company_name(company_name)
 
     # Clean description
@@ -168,11 +178,21 @@ def normalize_raw_job(raw_job: RawJobIngest) -> NormalizedJob:
         source_id=raw_job.source_id,
         company_source_id=raw_job.company_source_id,
         source_job_id=raw_job.source_job_id,
-        source_url=raw_job.source_url,
-        application_url=raw_job.application_url or raw_payload.get("absolute_url"),
+        source_url=raw_job.source_url or raw_payload.get("public_url") or raw_payload.get("absolute_url"),
+        application_url=(
+            raw_job.application_url
+            or raw_payload.get("absolute_url")
+            or raw_payload.get("public_url")
+            or raw_payload.get("job_url")
+        ),
         company_name=company_name,
         normalized_company_name=norm_company_name,
-        company_url=raw_payload.get("company_url"),
+        company_url=(
+            raw_payload.get("company_url")
+            or raw_payload.get("company_website")
+            or raw_payload.get("companyWebsite")
+            or raw_payload.get("company_homepage")
+        ),
         canonical_title=canonical_title,
         normalized_title=norm_title,
         description=clean_desc,

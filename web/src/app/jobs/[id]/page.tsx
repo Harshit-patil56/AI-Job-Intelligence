@@ -34,6 +34,8 @@ import { FluidActionButton } from "@/components/fluid-action-button";
 import { PipelineStatusSelector, getStatusBadgeProps } from "@/components/motion/pipeline-status";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ExternalLink } from "lucide-react";
+import { isValidCompanyWebsite } from "@/lib/urls";
 import type { JobDetail, CopilotApplicationPack } from "@/lib/types";
 
 function formatRoleVerdict(verdict?: string | null): string {
@@ -222,6 +224,11 @@ function JobDetailInner() {
   }
 
   const compName = job.company?.name || job.company_name || "Company";
+  const compWebsite = job.company?.website || (job as any)?.company_website;
+  const hasValidWebsite = isValidCompanyWebsite(compWebsite, compName);
+  const compIndustry = job.company?.sector || (job as any)?.company_sector || "Software & Technology";
+  const rawModel = job.company?.business_model || (job as any)?.company_business_model || "PRODUCT";
+  const compModel = rawModel === "SERVICES" ? "IT Services" : rawModel === "BOTH" ? "Hybrid Product / Services" : "Product Company";
   const isP1 = job.role_priority === "P1";
   const isP2 = job.role_priority === "P2";
   const isVerified = job.verification_confidence >= 0.9;
@@ -293,20 +300,39 @@ function JobDetailInner() {
               <CompanyAvatar
                 companyName={compName}
                 applicationUrl={job.application_url}
+                companyWebsite={hasValidWebsite ? compWebsite : undefined}
                 size="lg"
               />
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-bold text-[#191919] dark:text-[#F0F6FC]">
                     {compName}
                   </h2>
                   {isVerified && (
-                    <span className="flex items-center text-[#057642]" title="Direct ATS Verified Opportunity">
-                      <HugeiconsIcon icon={CheckmarkCircle01Icon} size={16} strokeWidth={2.5} />
+                    <span className="inline-flex items-center gap-1 rounded bg-[#E6F4EA] dark:bg-[#057642]/20 px-2 py-0.5 text-[11px] font-semibold text-[#057642] dark:text-[#3FB950]" title="Direct ATS Verified Opportunity">
+                      <HugeiconsIcon icon={CheckmarkCircle01Icon} size={13} strokeWidth={2.5} />
+                      Verified Employer
                     </span>
                   )}
+                  {hasValidWebsite && compWebsite && (
+                    <a
+                      href={compWebsite.startsWith("http") ? compWebsite : `https://${compWebsite}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded bg-[#F3F2F0] hover:bg-[#E8F3FF] dark:bg-[#30363D] dark:hover:bg-[#1F6FEB]/20 px-2 py-0.5 text-xs font-medium text-[#0A66C2] dark:text-[#70B5F9] transition-colors"
+                      title={`Visit ${compName} official website`}
+                    >
+                      <span>{compWebsite.replace(/^https?:\/\/(www\.)?/, "").replace(/\/.*$/, "")}</span>
+                      <ExternalLink className="size-3" />
+                    </a>
+                  )}
                 </div>
-                <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#191919] dark:text-[#F0F6FC]">
+                <div className="flex items-center gap-2 text-xs text-[#666666] dark:text-[#8B949E]">
+                  <span>{compIndustry}</span>
+                  <span>•</span>
+                  <span className="font-semibold text-[#191919] dark:text-[#F0F6FC]">{compModel}</span>
+                </div>
+                <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#191919] dark:text-[#F0F6FC] pt-1">
                   {job.title}
                 </h1>
                 <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-[#666666] dark:text-[#8B949E]">

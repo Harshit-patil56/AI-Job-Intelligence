@@ -35,16 +35,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    loop_setting = "asyncio.windows_events:ProactorEventLoop" if sys.platform == "win32" else "auto"
-
     uvicorn.run(
         "app.api.main:app",
         host=args.host,
         port=args.port,
         reload=args.reload,
-        app_dir=str(Path(__file__).resolve().parent.parent),
+        reload_dirs=[str(Path(__file__).resolve().parent.parent / "app")],
         log_level=args.log_level,
-        loop=loop_setting,
+        loop="asyncio",
     )
 
 

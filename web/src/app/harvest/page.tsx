@@ -42,7 +42,6 @@ import {
 import { RefreshCw } from "@/components/animate-ui/icons/refresh-cw";
 import { spring } from "@/lib/springs";
 import { cn } from "@/lib/utils";
-import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import {
   ThinkingSteps,
   ThinkingStepsHeader,
@@ -88,6 +87,69 @@ interface IngestionChannel {
 
 const INGESTION_CHANNELS: IngestionChannel[] = [
   {
+    id: "LINKEDIN",
+    name: "LinkedIn Jobs",
+    sample: "AI Engineer|Bengaluru",
+    label: "Top Global & Indian Tech Opportunities",
+    category: "Indian Tech",
+    badge: "Top Portal • P1",
+    badgeColor: "blue",
+  },
+  {
+    id: "NAUKRI",
+    name: "Naukri India",
+    sample: "Python Engineer|Bengaluru",
+    label: "Tier-1 Indian Tech Enterprise Portal",
+    category: "Indian Tech",
+    badge: "Top Portal • P2",
+    badgeColor: "orange",
+  },
+  {
+    id: "WELLFOUND",
+    name: "Wellfound (AngelList)",
+    sample: "jobs",
+    label: "Global & Indian Seed / Series-A Startups",
+    category: "Global ATS",
+    badge: "Top Portal • P3",
+    badgeColor: "teal",
+  },
+  {
+    id: "CUTSHORT",
+    name: "Cutshort India",
+    sample: "Bengaluru",
+    label: "Indian Founders & Direct Recruiters",
+    category: "Indian Tech",
+    badge: "Direct Connect",
+    badgeColor: "indigo",
+  },
+  {
+    id: "HIRIST",
+    name: "Hirist India",
+    sample: "AI Engineer",
+    label: "Premium Indian Tech Talents",
+    category: "Indian Tech",
+    badge: "Specialized",
+    badgeColor: "violet",
+  },
+  {
+    id: "INSTAHYRE",
+    name: "Instahyre India",
+    sample: "Python|Bengaluru",
+    label: "Direct Startup Sourcing & Hubs",
+    category: "Indian Tech",
+    badge: "Curated Hubs",
+    badgeColor: "amber",
+  },
+  {
+    id: "MATRIX",
+    name: "Indian Tech Matrix",
+    sample: "Bengaluru, Hyderabad",
+    label: "Prioritized Multi-Portal Parallel Ingestion Batch",
+    category: "Multi-Source",
+    badge: "High Throughput",
+    badgeColor: "blue",
+  },
+  {
     id: "GREENHOUSE",
     name: "Greenhouse",
     sample: "canonical",
@@ -112,60 +174,6 @@ const INGESTION_CHANNELS: IngestionChannel[] = [
     label: "Postman, Spotify, Docker",
     category: "Global ATS",
     badge: "Postings API",
-    badgeColor: "blue",
-  },
-  {
-    id: "INSTAHYRE",
-    name: "Instahyre India",
-    sample: "Python|Bengaluru",
-    label: "Direct Startup Sourcing & Hubs",
-    category: "Indian Tech",
-    badge: "Curated Hubs",
-    badgeColor: "amber",
-  },
-  {
-    id: "NAUKRI",
-    name: "Naukri India",
-    sample: "Python Engineer|Bengaluru",
-    label: "Tier-1 Indian Tech Portal",
-    category: "Indian Tech",
-    badge: "Enterprise Pool",
-    badgeColor: "orange",
-  },
-  {
-    id: "WELLFOUND",
-    name: "Wellfound (AngelList)",
-    sample: "jobs",
-    label: "Global & Indian Seed / Series-A",
-    category: "Global ATS",
-    badge: "Startup Direct",
-    badgeColor: "teal",
-  },
-  {
-    id: "CUTSHORT",
-    name: "Cutshort India",
-    sample: "Bengaluru",
-    label: "Indian Founders & Direct Recruiters",
-    category: "Indian Tech",
-    badge: "Direct Connect",
-    badgeColor: "indigo",
-  },
-  {
-    id: "HIRIST",
-    name: "Hirist India",
-    sample: "AI Engineer",
-    label: "Premium Indian Tech Talents",
-    category: "Indian Tech",
-    badge: "Specialized",
-    badgeColor: "violet",
-  },
-  {
-    id: "MATRIX",
-    name: "Indian Tech Matrix",
-    sample: "Bengaluru, Hyderabad",
-    label: "Multi-Source Parallel Ingestion Batch",
-    category: "Multi-Source",
-    badge: "High Throughput",
     badgeColor: "blue",
   },
 ];
@@ -205,6 +213,14 @@ export default function HarvestStudioPage() {
   const [isStepsOpen, setIsStepsOpen] = React.useState<boolean>(true);
   const [recentRuns, setRecentRuns] = React.useState<HarvestRunRecord[]>([]);
   const [isLoadingRuns, setIsLoadingRuns] = React.useState(false);
+  const [activeStageInfo, setActiveStageInfo] = React.useState<{
+    stage_name?: string;
+    stage_detail?: string;
+    source_id?: string;
+    company_name?: string;
+    jobs_found?: number;
+    status?: string;
+  } | null>(null);
   const abortControllerRef = React.useRef<AbortController | null>(null);
   // Gate: set true while a local submit fetch is in flight so the poller
   // cannot interfere and loop steps backward.
@@ -241,11 +257,15 @@ export default function HarvestStudioPage() {
       const runs = Array.isArray(data) ? data : data.runs || [];
       setRecentRuns(runs);
 
+      const activeStage = data.active_stage;
+      if (activeStage) {
+        setActiveStageInfo(activeStage);
+      }
+
       // --- Do NOT touch executionStep if a local fetch is in flight or we're done ---
       if (isLocallyRunningRef.current) return;
       if (hasCompletedRef.current) return;
 
-      const activeStage = data.active_stage;
       const latest = runs[0];
       const isRunning = latest?.status === "RUNNING" || activeStage?.is_active;
 
@@ -348,6 +368,9 @@ export default function HarvestStudioPage() {
 
   const handleStop = async () => {
     setIsStopping(true);
+    setActiveStageInfo((prev) =>
+      prev ? { ...prev, status: "STOPPED", stage_detail: "Harvest pipeline execution was stopped by user." } : null
+    );
     try {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -401,7 +424,7 @@ export default function HarvestStudioPage() {
       const payload = isMatrix
         ? {
             is_matrix: true,
-            sources: ["CUTSHORT", "HIRIST", "JOBSPY"],
+            sources: ["LINKEDIN", "NAUKRI", "WELLFOUND", "CUTSHORT", "HIRIST"],
             cities: endpointToken
               .split(",")
               .map((c) => c.trim())
@@ -663,17 +686,21 @@ export default function HarvestStudioPage() {
                 <div className="rounded-xl border border-border/60 bg-primary/[0.04] p-4 space-y-2">
                   <div className="flex items-center gap-2 text-xs font-semibold text-primary">
                     <HugeiconsIcon icon={Layers01Icon} size={15} />
-                    <span>Parallel Multi-Source Batch</span>
+                    <span>Prioritized Multi-Portal Search Matrix</span>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    This triggers concurrent scrapers across Cutshort, Hirist, and Jobspy targeting
-                    top Indian hubs (Bengaluru, Pune, Hyderabad, Gurgaon, Remote). Automated agency
-                    filtration and content hashing are applied prior to database commits.
+                    Prioritizes top tier portals (LinkedIn, Naukri, Wellfound) first, followed by Cutshort and Hirist across key Indian tech hubs (Bengaluru, Pune, Mumbai, Hyderabad, Remote). Verified deduplication ensures authentic primary company records.
                   </p>
                   <div className="flex flex-wrap gap-1.5 pt-1">
-                    {["Cutshort India", "Hirist AI", "Jobspy Aggregator"].map((source) => (
-                      <Badge key={source} color="blue" size="compact">
-                        {source}
+                    {[
+                      { name: "LinkedIn (Priority 1)", color: "blue" },
+                      { name: "Naukri (Priority 2)", color: "orange" },
+                      { name: "Wellfound (Priority 3)", color: "teal" },
+                      { name: "Cutshort India", color: "indigo" },
+                      { name: "Hirist India", color: "violet" },
+                    ].map((source) => (
+                      <Badge key={source.name} color={source.color as any} size="compact">
+                        {source.name}
                       </Badge>
                     ))}
                   </div>
@@ -822,35 +849,14 @@ export default function HarvestStudioPage() {
                   </div>
                 </div>
 
-                {/* 1. Fluid Functionalism ThinkingIndicator with Morphing SVG Infinity Loop & Shimmer Text */}
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-2">
-                  <ThinkingIndicator
-                    size="compact"
-                    words={
-                      isSubmitting
-                        ? [
-                            `Querying ${selectedChannel?.name || selectedSource}`,
-                            "Parsing Ingestion Payloads",
-                            "Deduplicating Postings",
-                            "Evaluating Agency Rules",
-                            "Committing Records",
-                          ]
-                        : result?.message?.includes("stopped")
-                        ? ["Execution Stopped by User", "Pipeline Aborted Cleanly"]
-                        : result?.success
-                        ? [
-                            "Harvest Pipeline Succeeded",
-                            `${result.jobs_found ?? 0} Listings Discovered`,
-                            `+${result.jobs_created ?? 0} New Listings Ingested`,
-                            `${result.jobs_updated ?? 0} Postings Refreshed`,
-                          ]
-                        : result
-                        ? ["Execution Failed", "Pipeline Encountered Error"]
-                        : ["Pipeline Standby", "Target Configured", "Awaiting Execution Launch"]
-                    }
-                    intervalMs={isSubmitting ? 2200 : 3800}
-                  />
-                </div>
+                {!isSubmitting && result?.message?.includes("stopped") && (
+                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in duration-150">
+                    <div className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                    <div className="flex-1 min-w-0 font-medium">
+                      Pipeline execution was stopped by user. All background workers and scrapers were halted.
+                    </div>
+                  </div>
+                )}
 
                 {/* 2. Fluid Functionalism ThinkingSteps Chain-of-Thought Stages with Continuous Connector Rail */}
                 <ThinkingSteps open={isStepsOpen} onOpenChange={setIsStepsOpen}>

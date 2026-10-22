@@ -56,6 +56,9 @@ export interface JobItem {
   application_url?: string | null;
   application_status?: string | null;
   sources_count: number;
+  company_website?: string | null;
+  company_sector?: string | null;
+  company_business_model?: string | null;
   description?: string | null;
   description_clean?: string | null;
   source_references?: JobSourceReference[];

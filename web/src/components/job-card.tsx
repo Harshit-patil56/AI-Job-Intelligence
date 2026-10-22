@@ -85,6 +85,7 @@ export function JobCard({
             <CompanyAvatar
               companyName={job.company_name}
               applicationUrl={job.application_url}
+              companyWebsite={job.company_website}
               size="md"
             />
 

@@ -16,6 +16,51 @@ from app.normalization.normalizer import normalize_company_name
 logger = structlog.get_logger()
 
 
+def fetch_and_store_logo_dev(company_name: str) -> Optional[str]:
+    """Dynamically discover real company domain and download logo to data/logos via logo.dev API."""
+    import os, urllib.request, urllib.parse, json
+
+    if not company_name or company_name.startswith("__") or company_name.lower() in ("unknown company", "unknown"):
+        return None
+
+    secret = os.getenv("LOGO_DEV_SECRET_KEY", "sk_dhpuIc5hTiuM8yeA7DWwqA")
+    token = os.getenv("LOGO_DEV_PUBLIC_KEY", "pk_Y4dZPtzsQeCVhx0WuHzfpw")
+    slug = "".join(c for c in company_name.lower() if c.isalnum())
+    if not slug:
+        return None
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    logos_dir = os.path.join(base_dir, "data", "logos")
+    os.makedirs(logos_dir, exist_ok=True)
+    file_path = os.path.join(logos_dir, f"{slug}.png")
+
+    try:
+        q = urllib.parse.quote(company_name)
+        req = urllib.request.Request(
+            f"https://api.logo.dev/search?q={q}",
+            headers={"Authorization": f"Bearer {secret}", "User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(req, timeout=3.5) as r:
+            items = json.loads(r.read().decode())
+            if not items:
+                return None
+            domain = items[0].get("domain")
+            if not domain:
+                return None
+
+            if not os.path.exists(file_path):
+                img_url = f"https://img.logo.dev/{domain}?token={token}&size=128&format=png&retina=true"
+                img_req = urllib.request.Request(img_url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(img_req, timeout=3.5) as ir:
+                    data = ir.read()
+                    if len(data) > 250:
+                        with open(file_path, "wb") as fp:
+                            fp.write(data)
+            return domain
+    except Exception:
+        return None
+
+
 class CompanyService:
     """Manages companies, sources, and ATS board registrations."""
 
@@ -56,23 +101,61 @@ class CompanyService:
         business_model: str = "UNKNOWN",
         verified: bool = False,
     ) -> Company:
-        """Find or create a normalized company profile."""
+        """Find or create a normalized company profile, enriched with curated employer metadata."""
+        import asyncio
+        from app.config.known_companies import get_curated_company_profile
+
         norm_name = normalize_company_name(name)
         stmt = select(Company).where(Company.normalized_name == norm_name)
         result = await self.session.execute(stmt)
         company = result.scalar_one_or_none()
+
+        curated = get_curated_company_profile(name)
+        eff_website = website or (curated["website"] if curated else None)
+
+        # If website is still missing, dynamically discover domain and download logo via logo.dev API
+        if not eff_website and not name.startswith("__") and name.lower() not in ("unknown company", "unknown"):
+            discovered_domain = await asyncio.to_thread(fetch_and_store_logo_dev, name)
+            if discovered_domain:
+                eff_website = f"https://{discovered_domain}"
+
+        eff_industry = industry or (curated["industry"] if curated else None)
+        eff_sector = sector if sector != "UNKNOWN" else (curated["sector"] if curated else "UNKNOWN")
+        eff_model = business_model if business_model != "UNKNOWN" else (curated["business_model"] if curated else "UNKNOWN")
+        eff_verified = verified or bool(curated) or bool(eff_website)
+
         if company:
+            # Upgrade existing company profile if more accurate data is available
+            updated = False
+            if eff_website and not company.website:
+                company.website = eff_website
+                updated = True
+            if eff_industry and not company.industry:
+                company.industry = eff_industry
+                updated = True
+            if eff_sector != "UNKNOWN" and company.sector == "UNKNOWN":
+                company.sector = eff_sector
+                updated = True
+            if eff_model != "UNKNOWN" and company.business_model == "UNKNOWN":
+                company.business_model = eff_model
+                updated = True
+            if eff_verified and not company.verified:
+                company.verified = True
+                company.confidence = 1.0
+                updated = True
+            if updated:
+                await self.session.flush()
             return company
 
         company = Company(
             name=name,
             normalized_name=norm_name,
-            website=website,
-            industry=industry,
-            sector=sector,
-            business_model=business_model,
-            verified=verified,
-            confidence=1.0 if verified else 0.5,
+            website=eff_website,
+            industry=eff_industry,
+            sector=eff_sector,
+            business_model=eff_model,
+            verified=eff_verified,
+            confidence=1.0 if eff_verified else 0.5,
         )
         self.session.add(company)
         await self.session.flush()

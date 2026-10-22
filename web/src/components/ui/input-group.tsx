@@ -258,7 +258,7 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
               onBlur={handleBlur}
               placeholder={placeholder}
               className={cn(
-                "w-full resize-none rounded-none bg-transparent text-foreground placeholder:text-muted-foreground outline-none font-[inherit] leading-relaxed overflow-hidden",
+                "w-full resize-none rounded-none bg-transparent text-foreground placeholder:text-muted-foreground/45 placeholder:italic placeholder:select-none dark:placeholder:text-zinc-500/70 outline-none font-[inherit] leading-relaxed overflow-hidden",
                 sizeClasses.field
               )}
               style={{ fontVariationSettings: fontWeights.normal }}
@@ -274,7 +274,7 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
               onBlur={handleBlur}
               placeholder={placeholder}
               className={cn(
-                "w-full rounded-none bg-transparent text-foreground placeholder:text-muted-foreground outline-none font-[inherit]",
+                "w-full rounded-none bg-transparent text-foreground placeholder:text-muted-foreground/45 placeholder:italic placeholder:select-none dark:placeholder:text-zinc-500/70 outline-none font-[inherit]",
                 sizeClasses.field
               )}
               style={{ fontVariationSettings: fontWeights.normal }}

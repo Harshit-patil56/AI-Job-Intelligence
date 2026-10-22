@@ -11,6 +11,7 @@ import structlog
 
 from app.api.routes.companies import router as companies_router
 from app.api.routes.jobs import router as jobs_router
+from app.api.routes.maintenance import router as maintenance_router
 from app.api.routes.pipeline import router as pipeline_router
 from app.api.routes.profile import router as profile_router
 from app.config.settings import settings
@@ -66,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(pipeline_router)
     app.include_router(companies_router)
     app.include_router(profile_router)
+    app.include_router(maintenance_router)
 
     return app
 
