@@ -79,6 +79,30 @@ def test_salary_monthly_inr():
     assert res.annual_min == 420_000.0
 
 
+def test_salary_l_range():
+    res = parse_salary("CTC: 15L - 25L")
+    assert res.annual_min == 1_500_000.0
+    assert res.annual_max == 2_500_000.0
+    assert res.salary_text == "₹15L - ₹25L"
+
+
+def test_salary_usd():
+    res = parse_salary("Salary range: $120k - $160k per year")
+    assert res.annual_min == 120_000.0
+    assert res.annual_max == 160_000.0
+    assert res.salary_currency == "USD"
+    assert res.salary_text == "$120k - $160k"
+
+
+def test_salary_market_estimation():
+    from app.normalization.salary_parser import estimate_market_salary
+    res = estimate_market_salary("P1", experience_min=3.0)
+    assert res.is_estimated is True
+    assert res.annual_min == 1_800_000.0
+    assert res.annual_max == 3_200_000.0
+    assert "(Est.)" in res.salary_text
+
+
 def test_company_name_normalization():
     assert normalize_company_name("Razorpay Software Pvt Ltd") == "razorpay"
     assert normalize_company_name("BrowserStack Inc.") == "browserstack"

@@ -429,3 +429,20 @@ class CandidateProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
+
+
+class ApiCredential(Base):
+    """Secure persistent configuration for external API providers and LLM gateways."""
+
+    __tablename__ = "api_credentials"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # 'gemini', 'groq', 'openrouter', 'ollama', 'logo_dev'
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    api_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    secondary_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)  # e.g. public key
+    base_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    model_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )

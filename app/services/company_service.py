@@ -16,17 +16,29 @@ from app.normalization.normalizer import normalize_company_name
 logger = structlog.get_logger()
 
 
-def fetch_and_store_logo_dev(company_name: str) -> Optional[str]:
-    """Dynamically discover real company domain and download logo to data/logos via logo.dev API."""
-    import os, urllib.request, urllib.parse, json
+def fetch_and_store_company_logo(company_name: str, domain: Optional[str] = None) -> Optional[str]:
+    """Download employer logo directly to data/logos via internal CDN pipeline."""
+    import os, urllib.request, re
 
     if not company_name or company_name.startswith("__") or company_name.lower() in ("unknown company", "unknown"):
         return None
 
-    secret = os.getenv("LOGO_DEV_SECRET_KEY", "sk_dhpuIc5hTiuM8yeA7DWwqA")
-    token = os.getenv("LOGO_DEV_PUBLIC_KEY", "pk_Y4dZPtzsQeCVhx0WuHzfpw")
     slug = "".join(c for c in company_name.lower() if c.isalnum())
     if not slug:
+        return None
+
+    # Resolve domain if not provided
+    resolved_domain = domain
+    if not resolved_domain:
+        if "." in company_name:
+            for w in company_name.strip().split():
+                if "." in w and not w.startswith("http"):
+                    resolved_domain = re.sub(r"[^a-z0-9.-]", "", w.lower()).strip(".")
+                    break
+        if not resolved_domain and len(slug) >= 3:
+            resolved_domain = f"{slug}.com"
+
+    if not resolved_domain:
         return None
 
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -34,31 +46,24 @@ def fetch_and_store_logo_dev(company_name: str) -> Optional[str]:
     os.makedirs(logos_dir, exist_ok=True)
     file_path = os.path.join(logos_dir, f"{slug}.png")
 
-    try:
-        q = urllib.parse.quote(company_name)
-        req = urllib.request.Request(
-            f"https://api.logo.dev/search?q={q}",
-            headers={"Authorization": f"Bearer {secret}", "User-Agent": "Mozilla/5.0"}
-        )
-        with urllib.request.urlopen(req, timeout=3.5) as r:
-            items = json.loads(r.read().decode())
-            if not items:
-                return None
-            domain = items[0].get("domain")
-            if not domain:
-                return None
-
-            if not os.path.exists(file_path):
-                img_url = f"https://img.logo.dev/{domain}?token={token}&size=128&format=png&retina=true"
-                img_req = urllib.request.Request(img_url, headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(img_req, timeout=3.5) as ir:
+    if not os.path.exists(file_path):
+        candidate_urls = [
+            f"https://www.google.com/s2/favicons?domain={resolved_domain}&sz=128",
+            f"https://icons.duckduckgo.com/ip3/{resolved_domain}.ico",
+        ]
+        for url in candidate_urls:
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=3.0) as ir:
                     data = ir.read()
                     if len(data) > 250:
                         with open(file_path, "wb") as fp:
                             fp.write(data)
-            return domain
-    except Exception:
-        return None
+                        break
+            except Exception:
+                continue
+
+    return resolved_domain
 
 
 class CompanyService:
@@ -113,9 +118,9 @@ class CompanyService:
         curated = get_curated_company_profile(name)
         eff_website = website or (curated["website"] if curated else None)
 
-        # If website is still missing, dynamically discover domain and download logo via logo.dev API
+        # If website is still missing, dynamically discover domain and download logo via our logo pipeline
         if not eff_website and not name.startswith("__") and name.lower() not in ("unknown company", "unknown"):
-            discovered_domain = await asyncio.to_thread(fetch_and_store_logo_dev, name)
+            discovered_domain = await asyncio.to_thread(fetch_and_store_company_logo, name)
             if discovered_domain:
                 eff_website = f"https://{discovered_domain}"
 

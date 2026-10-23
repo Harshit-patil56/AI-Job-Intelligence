@@ -8,11 +8,16 @@ import html
 import re
 from bs4 import BeautifulSoup
 
-from app.models.schemas import NormalizedJob, RawJobIngest
+from app.models.schemas import NormalizedJob, RawJobIngest, SalaryPeriod
 from app.normalization.agency_detector import detect_agency
 from app.normalization.experience_parser import parse_experience
 from app.normalization.location_parser import parse_location
-from app.normalization.salary_parser import parse_salary
+from app.normalization.salary_parser import (
+    SalaryAnalysis,
+    estimate_market_salary,
+    format_salary_display,
+    parse_salary,
+)
 
 LEGAL_SUFFIXES = [
     r"\bpvt\.?\s*ltd\.?\b",
@@ -156,12 +161,68 @@ def normalize_raw_job(raw_job: RawJobIngest) -> NormalizedJob:
     exp_analysis = parse_experience(raw_text=f"{exp_snippet}\n{clean_desc[:2000]}", title=canonical_title)
 
     # Parse salary
-    salary_snippet = (
-        raw_payload.get("salary")
+    # 1. First priority: Check if raw_payload already has explicit structured salary fields
+    raw_sal_min = raw_payload.get("salary_min") or raw_payload.get("min_amount")
+    raw_sal_max = raw_payload.get("salary_max") or raw_payload.get("max_amount")
+    raw_sal_curr = raw_payload.get("salary_currency") or raw_payload.get("currency") or "INR"
+    raw_sal_period = raw_payload.get("salary_period") or raw_payload.get("interval") or "ANNUAL"
+    raw_sal_text = (
+        raw_payload.get("salary_text")
+        or raw_payload.get("salaryRangeText")
         or raw_payload.get("compensation")
-        or ""
+        or raw_payload.get("salary")
     )
-    salary_analysis = parse_salary(f"{salary_snippet} {clean_desc[:1500]}")
+
+    salary_analysis = None
+
+    if raw_sal_min is not None or raw_sal_max is not None:
+        try:
+            s_min = float(raw_sal_min) if raw_sal_min is not None else None
+            s_max = float(raw_sal_max) if raw_sal_max is not None else s_min
+            ann_min = s_min
+            ann_max = s_max
+            per_enum = SalaryPeriod.ANNUAL
+            if str(raw_sal_period).upper() in ("MONTHLY", "MONTH", "MO"):
+                per_enum = SalaryPeriod.MONTHLY
+                if s_min:
+                    ann_min = s_min * 12.0
+                if s_max:
+                    ann_max = s_max * 12.0
+
+            disp_text = format_salary_display(s_min, s_max, raw_sal_curr, raw_sal_period, str(raw_sal_text) if raw_sal_text else None)
+            salary_analysis = SalaryAnalysis(
+                salary_min=s_min,
+                salary_max=s_max,
+                salary_currency=str(raw_sal_curr).upper(),
+                salary_period=per_enum,
+                salary_text=disp_text,
+                annual_min=ann_min,
+                annual_max=ann_max,
+                is_estimated=False,
+            )
+        except (ValueError, TypeError):
+            pass
+
+    # 2. Second priority: Parse from text snippet or full job description
+    if not salary_analysis or salary_analysis.annual_min is None:
+        salary_snippet = str(raw_sal_text or "")
+        full_salary_text = f"{salary_snippet}\n{clean_desc}"
+        salary_analysis = parse_salary(full_salary_text)
+
+    # 3. Third priority: Market estimate based on title, experience & location
+    if not salary_analysis or salary_analysis.annual_min is None:
+        title_lower = canonical_title.lower()
+        role_p = "P1" if any(k in title_lower for k in ("genai", "generative ai", "llm", "agent", "prompt")) else (
+            "P2" if any(k in title_lower for k in ("backend", "distributed", "data engineer", "platform")) else (
+                "P3" if any(k in title_lower for k in ("software", "full stack", "frontend", "developer", "engineer")) else "OTHER"
+            )
+        )
+        salary_analysis = estimate_market_salary(
+            role_priority=role_p,
+            experience_min=exp_analysis.experience_min,
+            experience_max=exp_analysis.experience_max,
+            location=raw_location,
+        )
 
     # Parse posted_at date
     posted_at = (

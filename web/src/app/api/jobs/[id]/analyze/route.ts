@@ -21,9 +21,16 @@ export async function POST(
     });
 
     if (!res.ok) {
-      const errText = await res.text();
+      let detail = `Backend returned ${res.status}`;
+      try {
+        const errJson = await res.json();
+        detail = errJson.detail || errJson.error || detail;
+      } catch {
+        const text = await res.text().catch(() => "");
+        if (text) detail = text;
+      }
       return NextResponse.json(
-        { error: `Backend returned ${res.status}: ${errText}` },
+        { error: detail, detail },
         { status: res.status }
       );
     }

@@ -79,6 +79,20 @@ import {
   Database,
 } from "lucide-react";
 
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Key01Icon } from "@hugeicons/core-free-icons";
+
+function KeyIcon({ size = 15, strokeWidth = 1.5, className }: IconComponentProps) {
+  return (
+    <HugeiconsIcon
+      icon={Key01Icon}
+      size={size}
+      strokeWidth={strokeWidth}
+      className={className}
+    />
+  );
+}
+
 // The whole contract an icon has to meet. Components pass `strokeWidth` and
 // also animate stroke width through `className` (1.5 → 2 on hover is a
 // common cue), so an icon from another library should forward both to its
@@ -108,7 +122,7 @@ export type IconName =
   | "home" | "message-circle" | "inbox"
   | "pencil" | "scaling" | "skip-forward" | "corner-down-right" | "corner-down-left"
   | "panel-left" | "panel-right" | "chevrons-up-down" | "more-horizontal" | "more-vertical" | "calendar" | "folder"
-  | "sliders-horizontal" | "info" | "database";
+  | "sliders-horizontal" | "info" | "database" | "key";
 
 export const defaultIcons: Record<IconName, IconComponent> = {
   "chevron-right": ChevronRight,
@@ -171,6 +185,7 @@ export const defaultIcons: Record<IconName, IconComponent> = {
   "sliders-horizontal": SlidersHorizontal,
   "info": Info,
   "database": Database,
+  "key": KeyIcon,
 };
 
 const IconContext = createContext<Record<IconName, IconComponent> | null>(null);

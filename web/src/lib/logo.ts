@@ -1,13 +1,10 @@
 /**
- * Company logo resolution utility with 4-Tier Free-First Cascade:
- * Tier 1: Google High-Res Favicon CDN (Free, 128px)
- * Tier 2: DuckDuckGo Icons CDN (Free)
- * Tier 3: Logo.dev (Paid fallback with CDN token)
+ * Company logo resolution utility with internal caching & free high-res CDN cascade:
+ * Tier 1: Internal Disk & Memory Cache (/api/logo)
+ * Tier 2: Google High-Res Favicon CDN (Free, 128px)
+ * Tier 3: DuckDuckGo Icons CDN (Free)
  * Tier 4: Letter Monogram
  */
-
-const PUBLIC_TOKEN =
-  process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN || "pk_Y4dZPtzsQeCVhx0WuHzfpw";
 
 // Authoritative dictionary of Indian and Global Tech Employers
 export const KNOWN_DOMAINS: Record<string, string> = {
@@ -249,15 +246,15 @@ export function resolveCompanyDomain(
 }
 
 /**
- * Returns logo sources avoiding circular icons (e.g. Google Favicon V2 which forces circular masks).
- * Uses logo.dev official square/vector brand assets with retina resolution.
+ * Returns logo sources using our internal proxy endpoint and high-res CDNs.
  */
 export function getLogoCascadeSources(domain: string): string[] {
   if (!domain) return [];
 
   return [
-    // Official non-circular square brand mark via logo.dev CDN
-    `https://img.logo.dev/${domain}?token=${PUBLIC_TOKEN}&size=80&format=png&retina=true`,
+    `/api/logo?domain=${encodeURIComponent(domain)}`,
+    `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`,
+    `https://icons.duckduckgo.com/ip3/${encodeURIComponent(domain)}.ico`,
   ];
 }
 

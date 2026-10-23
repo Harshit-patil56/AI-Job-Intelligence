@@ -9,7 +9,6 @@ from typing import Dict, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from app.ai.adapters.fallback import DeterministicFallbackAdapter
 from app.ai.adapters.gemini import GeminiAdapter
 from app.ai.adapters.groq import GroqAdapter
 from app.ai.adapters.ollama import OllamaAdapter
@@ -32,7 +31,6 @@ class LLMGateway:
             GroqAdapter(),
             OpenRouterAdapter(),
             OllamaAdapter(),
-            DeterministicFallbackAdapter(),
         ]
         # Tracks provider cooldown expiration timestamps (unix epoch)
         self._cooldowns: Dict[str, float] = {}
@@ -41,6 +39,55 @@ class LLMGateway:
     def get_configured_adapters(self) -> List[BaseLLMAdapter]:
         """Return list of adapters whose configuration/credentials are present."""
         return [adapter for adapter in self._adapters if adapter.is_configured()]
+
+    async def get_active_adapters(self, session: Optional[AsyncSession] = None) -> List[BaseLLMAdapter]:
+        """Fetch active, enabled adapters using DB credentials or fallback to settings."""
+        if session:
+            try:
+                from sqlalchemy import select
+                from app.models.entities import ApiCredential
+                stmt = select(ApiCredential)
+                res = await session.execute(stmt)
+                creds = {c.id: c for c in res.scalars().all()}
+                adapters: List[BaseLLMAdapter] = []
+
+                # Gemini
+                g = creds.get("gemini")
+                if g:
+                    if g.is_enabled and g.api_key:
+                        adapters.append(GeminiAdapter(api_key=g.api_key, model_name=g.model_name))
+                elif settings.gemini_api_key:
+                    adapters.append(GeminiAdapter())
+
+                # Groq
+                gr = creds.get("groq")
+                if gr:
+                    if gr.is_enabled and gr.api_key:
+                        adapters.append(GroqAdapter(api_key=gr.api_key, model_name=gr.model_name))
+                elif settings.groq_api_key:
+                    adapters.append(GroqAdapter())
+
+                # OpenRouter
+                op = creds.get("openrouter")
+                if op:
+                    if op.is_enabled and op.api_key:
+                        adapters.append(OpenRouterAdapter(api_key=op.api_key, model_name=op.model_name))
+                elif settings.openrouter_api_key:
+                    adapters.append(OpenRouterAdapter())
+
+                # Ollama
+                ol = creds.get("ollama")
+                if ol:
+                    if ol.is_enabled and ol.base_url:
+                        adapters.append(OllamaAdapter(base_url=ol.base_url, model_name=ol.model_name))
+                elif settings.ollama_base_url:
+                    adapters.append(OllamaAdapter())
+
+                return [a for a in adapters if a.is_configured()]
+            except Exception as e:
+                logger.warning("Failed to load adapters from db credentials", error=str(e))
+
+        return [a for a in self._adapters if a.is_configured()]
 
     def is_in_cooldown(self, provider_name: str) -> bool:
         """Check if provider is temporarily suspended due to recent 429/timeout."""
@@ -68,10 +115,13 @@ class LLMGateway:
         force_refresh: bool = False,
     ) -> LLMResponse:
         """Evaluate a job posting against early-career criteria with cache-first resolution."""
-        configured_adapters = self.get_configured_adapters()
+        configured_adapters = await self.get_active_adapters(session)
         if not configured_adapters:
-            # Fallback is always configured, but guard just in case
-            configured_adapters = [DeterministicFallbackAdapter()]
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=503,
+                detail="No active AI provider is configured or enabled. Please add or toggle on an API key in Profile -> API settings.",
+            )
 
         # 1. Check deterministic cache using primary candidate model
         primary_adapter = configured_adapters[0]
@@ -83,7 +133,7 @@ class LLMGateway:
 
         if not force_refresh:
             cached = await AICacheManager.get_cached(session, input_hash)
-            if cached and cached.output_payload:
+            if cached and cached.output_payload and cached.provider != "FALLBACK_HEURISTIC":
                 logger.info(
                     "Serving AI evaluation from deterministic cache",
                     job_id=job_id,
@@ -168,16 +218,10 @@ class LLMGateway:
                 self.set_cooldown(adapter.provider_name)
                 continue
 
-        # If all active providers failed, use deterministic fallback directly
-        fallback = DeterministicFallbackAdapter()
-        assessment, _ = await fallback.generate_assessment(user_prompt, SYSTEM_PROMPT)
-        return LLMResponse(
-            provider=fallback.provider_name,
-            model=fallback.model_name,
-            prompt_version=PROMPT_VERSION,
-            input_hash=input_hash,
-            parsed=assessment,
-            tokens_used=0,
-            latency_ms=1.0,
-            from_cache=False,
+        # If all active providers failed, raise error instead of returning fake demo data
+        from fastapi import HTTPException
+        err_detail = f": {last_error}" if last_error else "."
+        raise HTTPException(
+            status_code=502,
+            detail=f"All configured LLM providers failed inference{err_detail}",
         )

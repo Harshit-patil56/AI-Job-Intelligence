@@ -68,6 +68,7 @@ import HiCalendar from "@hugeicons/core-free-icons/Calendar01Icon";
 import HiFolder from "@hugeicons/core-free-icons/Folder01Icon";
 import HiSliders from "@hugeicons/core-free-icons/SlidersHorizontalIcon";
 import HiInfo from "@hugeicons/core-free-icons/InformationCircleIcon";
+import HiKey from "@hugeicons/core-free-icons/Key01Icon";
 import { Play, Pause, Database } from "lucide-react";
 import type { IconComponent, IconComponentProps, IconName } from "@/lib/icon-context";
 
@@ -147,4 +148,5 @@ export const hugeiconsIcons: Record<IconName, IconComponent> = {
   "sliders-horizontal": hugeicons(HiSliders),
   "info": hugeicons(HiInfo),
   "database": Database,
+  "key": hugeicons(HiKey),
 };

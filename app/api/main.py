@@ -14,6 +14,7 @@ from app.api.routes.jobs import router as jobs_router
 from app.api.routes.maintenance import router as maintenance_router
 from app.api.routes.pipeline import router as pipeline_router
 from app.api.routes.profile import router as profile_router
+from app.api.routes.settings import router as settings_router
 from app.config.settings import settings
 from app.models.database import close_db, init_db
 from app.scheduling.scheduler import AppScheduler
@@ -68,6 +69,7 @@ def create_app() -> FastAPI:
     app.include_router(companies_router)
     app.include_router(profile_router)
     app.include_router(maintenance_router)
+    app.include_router(settings_router)
 
     return app
 

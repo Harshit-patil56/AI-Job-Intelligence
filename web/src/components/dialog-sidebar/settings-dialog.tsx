@@ -28,6 +28,8 @@ import {
   DropdownMenu,
   DropdownTrigger,
   DropdownContent,
+  DropdownSearch,
+  DropdownEmpty,
   MenuItem,
 } from "@/components/ui/dropdown";
 import { InputGroup, InputField } from "@/components/ui/input-group";
@@ -52,12 +54,29 @@ import {
   AlertTriangle,
   UploadCloud,
   FileText,
+  Key,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Zap,
+  Search,
 } from "lucide-react";
-import { GitHubLogoIcon, LinkedInLogoIcon } from "@/components/ui/brand-icons";
+import { motion, AnimatePresence } from "motion/react";
+import { spring } from "@/lib/springs";
+import {
+  GitHubLogoIcon,
+  LinkedInLogoIcon,
+  GeminiLogoIcon,
+  GroqLogoIcon,
+  OpenRouterLogoIcon,
+  OllamaLogoIcon,
+} from "@/components/ui/brand-icons";
 import { TagCombobox } from "@/components/ui/tag-combobox";
 import { useIcons, type IconName } from "@/lib/icon-context";
 import { cn } from "@/lib/utils";
 import { fontWeights } from "@/lib/font-weight";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Key01Icon } from "@hugeicons/core-free-icons";
 
 export interface CandidateProfileData {
   id?: string;
@@ -108,6 +127,13 @@ const SECTIONS: SettingsSection[] = [
     group: "Workspace",
     icon: "brain",
     description: "Personalized bullet point tone, target length, and outreach styling.",
+  },
+  {
+    id: "api",
+    label: "API",
+    group: "Workspace",
+    icon: "key",
+    description: "Securely manage LLM API keys, models, and runtime inference toggles.",
   },
   {
     id: "database",
@@ -775,6 +801,8 @@ function SectionPanel({
       );
     case "copilot":
       return <CopilotPanel />;
+    case "api":
+      return <ApiPanel />;
     case "database":
       return <DatabasePanel />;
     default:
@@ -1312,6 +1340,695 @@ function CopilotPanel() {
   );
 }
 
+// ─── 4b. API Credentials & LLM Routing Panel ─────────────────────────────────
+
+interface ApiProviderCredential {
+  id: string;
+  provider: string;
+  description: string;
+  is_enabled: boolean;
+  has_key: boolean;
+  masked_key: string | null;
+  secondary_key: string | null;
+  has_secondary_key: boolean;
+  base_url: string | null;
+  model_name: string | null;
+  updated_at: string | null;
+}
+
+interface ModelOption {
+  id: string;
+  name: string;
+  is_free: boolean;
+}
+
+const DEFAULT_PROVIDER_MODELS: Record<string, ModelOption[]> = {
+  gemini: [
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", is_free: true },
+    { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite", is_free: true },
+    { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", is_free: false },
+    { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", is_free: true },
+    { id: "gemini-2.0-flash-lite", name: "Gemini 2.0 Flash Lite", is_free: true },
+  ],
+  groq: [
+    { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B Versatile", is_free: true },
+    { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant", is_free: true },
+    { id: "deepseek-r1-distill-llama-70b", name: "DeepSeek R1 Distill Llama 70B", is_free: true },
+    { id: "deepseek-r1-distill-qwen-32b", name: "DeepSeek R1 Distill Qwen 32B", is_free: true },
+    { id: "qwen-2.5-32b", name: "Qwen 2.5 32B", is_free: true },
+    { id: "llama-3.2-3b-preview", name: "Llama 3.2 3B Preview", is_free: true },
+    { id: "llama-3.2-1b-preview", name: "Llama 3.2 1B Preview", is_free: true },
+    { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B 32k", is_free: true },
+    { id: "gemma2-9b-it", name: "Gemma 2 9B IT", is_free: true },
+  ],
+  openrouter: [
+    { id: "deepseek/deepseek-chat:free", name: "DeepSeek V3 (Free)", is_free: true },
+    { id: "deepseek/deepseek-r1:free", name: "DeepSeek R1 (Free)", is_free: true },
+    { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B Instruct (Free)", is_free: true },
+    { id: "google/gemini-2.0-flash-exp:free", name: "Gemini 2.0 Flash Exp (Free)", is_free: true },
+    { id: "google/gemini-2.0-flash-thinking-exp:free", name: "Gemini 2.0 Thinking (Free)", is_free: true },
+    { id: "qwen/qwen-2.5-72b-instruct:free", name: "Qwen 2.5 72B Instruct (Free)", is_free: true },
+    { id: "mistralai/mistral-7b-instruct:free", name: "Mistral 7B Instruct (Free)", is_free: true },
+    { id: "microsoft/phi-3-medium-128k-instruct:free", name: "Phi-3 Medium 128k (Free)", is_free: true },
+    { id: "meta-llama/llama-3.2-3b-instruct:free", name: "Llama 3.2 3B (Free)", is_free: true },
+    { id: "anthropic/claude-3.7-sonnet", name: "Claude 3.7 Sonnet", is_free: false },
+    { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", is_free: false },
+    { id: "openai/gpt-4o", name: "GPT-4o", is_free: false },
+    { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", is_free: false },
+    { id: "deepseek/deepseek-r1", name: "DeepSeek R1", is_free: false },
+    { id: "deepseek/deepseek-chat", name: "DeepSeek V3", is_free: false },
+  ],
+  ollama: [
+    { id: "llama3.3:70b", name: "Llama 3.3 70B (Local)", is_free: true },
+    { id: "llama3.2:3b", name: "Llama 3.2 3B (Local)", is_free: true },
+    { id: "llama3.2:1b", name: "Llama 3.2 1B (Local)", is_free: true },
+    { id: "llama3.1:8b", name: "Llama 3.1 8B (Local)", is_free: true },
+    { id: "deepseek-r1:8b", name: "DeepSeek R1 8B (Local)", is_free: true },
+    { id: "deepseek-r1:14b", name: "DeepSeek R1 14B (Local)", is_free: true },
+    { id: "mistral:7b", name: "Mistral 7B (Local)", is_free: true },
+    { id: "qwen2.5:7b", name: "Qwen 2.5 7B (Local)", is_free: true },
+    { id: "qwen2.5-coder:7b", name: "Qwen 2.5 Coder 7B (Local)", is_free: true },
+    { id: "phi4:14b", name: "Phi-4 14B (Local)", is_free: true },
+    { id: "phi3:mini", name: "Phi-3 Mini (Local)", is_free: true },
+    { id: "gemma2:9b", name: "Gemma 2 9B (Local)", is_free: true },
+  ],
+};
+
+function renderProviderLogo(id: string) {
+  switch (id) {
+    case "gemini":
+      return <GeminiLogoIcon size={16} className="text-foreground" />;
+    case "groq":
+      return <GroqLogoIcon size={16} className="text-foreground" />;
+    case "openrouter":
+      return <OpenRouterLogoIcon size={16} className="text-foreground" />;
+    case "ollama":
+      return <OllamaLogoIcon size={16} className="text-foreground" />;
+    default:
+      return <HugeiconsIcon icon={Key01Icon} size={16} className="text-foreground" />;
+  }
+}
+
+/** Skill-section style model dropdown with single typeahead search input and filled Free badges */
+function ModelCombobox({
+  providerId,
+  value,
+  onChange,
+  models,
+  isLoading,
+  onRefresh,
+}: {
+  providerId: string;
+  value: string;
+  onChange: (model: string) => void;
+  models: ModelOption[];
+  isLoading?: boolean;
+  onRefresh?: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [typedQuery, setTypedQuery] = React.useState("");
+  const [isSearching, setIsSearching] = React.useState(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  // When opening dropdown, show ALL models by default (never pre-filter down to just 1 model)
+  const handleOpenDropdown = () => {
+    setIsSearching(false);
+    setTypedQuery("");
+    setOpen(true);
+    setTimeout(() => inputRef.current?.select(), 10);
+  };
+
+  // Filter models only when user actively types into the search box
+  const filtered = React.useMemo(() => {
+    if (!isSearching || !typedQuery.trim()) {
+      return models;
+    }
+    const q = typedQuery.trim().toLowerCase();
+    return models.filter(
+      (m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)
+    );
+  }, [models, typedQuery, isSearching]);
+
+  const selectedModel = models.find((m) => m.id === value);
+  const isSelectedFree = selectedModel?.is_free || (value && value.includes(":free"));
+
+  const trimmedQuery = typedQuery.trim();
+  const canCreateCustom =
+    isSearching &&
+    trimmedQuery !== "" &&
+    !models.some((m) => m.id.toLowerCase() === trimmedQuery.toLowerCase());
+
+  const handleSelect = (modelId: string) => {
+    onChange(modelId);
+    setIsSearching(false);
+    setTypedQuery("");
+    setOpen(false);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTypedQuery(e.target.value);
+    setIsSearching(true);
+    if (!open) setOpen(true);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (filtered.length > 0) {
+        handleSelect(filtered[0].id);
+      } else if (canCreateCustom) {
+        handleSelect(trimmedQuery);
+      }
+    } else if (e.key === "ArrowDown" && !open) {
+      e.preventDefault();
+      handleOpenDropdown();
+    } else if (e.key === "Escape") {
+      setIsSearching(false);
+      setTypedQuery("");
+      setOpen(false);
+    }
+  };
+
+  const handleClear = () => {
+    setTypedQuery("");
+    setIsSearching(false);
+    inputRef.current?.focus();
+  };
+
+  const selectedIndex = filtered.findIndex((m) => m.id === value);
+  const displayValue = isSearching ? typedQuery : (value || "");
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+          <span>Inference Model</span>
+          {isLoading && <RefreshCw size={11} className="animate-spin text-muted-foreground" />}
+        </label>
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            title="Fetch available models"
+            className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer transition-colors"
+          >
+            <RefreshCw size={10} className={cn(isLoading && "animate-spin")} />
+            <span>Fetch models</span>
+          </button>
+        )}
+      </div>
+
+      <DropdownMenu open={open} onOpenChange={setOpen} className="relative w-full">
+        {/* Single typeahead search bar matching skill section TagCombobox */}
+        <div className="relative flex items-center w-full">
+          <Search
+            size={13}
+            className="absolute left-3 text-muted-foreground pointer-events-none"
+          />
+          <input
+            ref={inputRef}
+            type="text"
+            value={displayValue}
+            onChange={handleInputChange}
+            onClick={() => {
+              if (!open) handleOpenDropdown();
+            }}
+            onFocus={() => {
+              if (!open) handleOpenDropdown();
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="Search or enter model (e.g. flash, 70b, free)..."
+            className="h-9 w-full rounded-lg border border-border bg-background pl-8.5 pr-24 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono transition-all shadow-2xs"
+          />
+          <div className="absolute right-2 flex items-center gap-1.5">
+            {isSelectedFree && (
+              <Badge
+                variant="solid"
+                color="emerald"
+                size="compact"
+                className="shrink-0 font-sans font-semibold text-emerald-800 dark:text-emerald-200 bg-emerald-500/20 dark:bg-emerald-500/25 border border-emerald-500/30"
+              >
+                Free
+              </Badge>
+            )}
+            {open && isSearching ? (
+              <button
+                type="button"
+                onClick={handleClear}
+                className="flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Clear filter"
+              >
+                <X size={12} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  if (open) setOpen(false);
+                  else handleOpenDropdown();
+                }}
+                className="flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Toggle model list"
+              >
+                <ChevronDown
+                  size={13}
+                  className={cn(
+                    "transition-transform duration-150",
+                    open && "rotate-180 text-foreground"
+                  )}
+                />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Dropdown Content without nested search bar and without duplicate outer scrollbar */}
+        <DropdownContent
+          align="start"
+          className="w-full min-w-full"
+          checkedIndex={selectedIndex >= 0 ? selectedIndex : undefined}
+        >
+          {filtered.length === 0 && !canCreateCustom ? (
+            <DropdownEmpty>
+              {isLoading ? "Fetching live models..." : "No models found"}
+            </DropdownEmpty>
+          ) : (
+            filtered.map((m, idx) => (
+              <MenuItem
+                key={m.id}
+                index={idx}
+                label={m.name && m.name !== m.id ? `${m.name} (${m.id})` : m.id}
+                checked={value === m.id}
+                onSelect={() => handleSelect(m.id)}
+                badge={
+                  m.is_free ? (
+                    <Badge
+                      variant="solid"
+                      color="emerald"
+                      size="compact"
+                      className="font-semibold text-emerald-800 dark:text-emerald-200 bg-emerald-500/20 dark:bg-emerald-500/25 border border-emerald-500/30 font-sans"
+                    >
+                      Free
+                    </Badge>
+                  ) : undefined
+                }
+              />
+            ))
+          )}
+
+          {canCreateCustom && (
+            <MenuItem
+              index={filtered.length}
+              label={`Use custom: "${trimmedQuery}"`}
+              onSelect={() => handleSelect(trimmedQuery)}
+            />
+          )}
+        </DropdownContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function ApiPanel() {
+  const [providers, setProviders] = React.useState<ApiProviderCredential[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [drafts, setDrafts] = React.useState<Record<string, { apiKey?: string; secondaryKey?: string; modelName?: string; baseUrl?: string }>>({});
+  const [showKey, setShowKey] = React.useState<Record<string, boolean>>({});
+  const [testingId, setTestingId] = React.useState<string | null>(null);
+  const [testResults, setTestResults] = React.useState<Record<string, { success: boolean; message: string; latency_ms?: number }>>({});
+  const [savingId, setSavingId] = React.useState<string | null>(null);
+  const [saveFeedback, setSaveFeedback] = React.useState<Record<string, { text: string; error?: boolean }>>({});
+  const [providerModels, setProviderModels] = React.useState<Record<string, ModelOption[]>>(DEFAULT_PROVIDER_MODELS);
+  const [fetchingModels, setFetchingModels] = React.useState<Record<string, boolean>>({});
+
+  const fetchModelsForProvider = React.useCallback(async (providerId: string, key?: string, url?: string) => {
+    if (providerId === "logo_dev") return;
+    setFetchingModels((prev) => ({ ...prev, [providerId]: true }));
+    try {
+      const res = await fetch(`/api/settings/api-keys/models/${providerId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: key, base_url: url }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setProviderModels((prev) => ({ ...prev, [providerId]: data }));
+        }
+      }
+    } catch (err) {
+      console.warn(`Could not load models for ${providerId}`, err);
+    } finally {
+      setFetchingModels((prev) => ({ ...prev, [providerId]: false }));
+    }
+  }, []);
+
+  const fetchProviders = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/settings/api-keys");
+      if (res.ok) {
+        const data: ApiProviderCredential[] = await res.json();
+        setProviders(data);
+        // Preload models for configured providers
+        data.forEach((p) => {
+          if (p.id !== "logo_dev") {
+            fetchModelsForProvider(p.id, p.masked_key || undefined, p.base_url || undefined);
+          }
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load API keys", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchModelsForProvider]);
+
+  React.useEffect(() => {
+    fetchProviders();
+  }, [fetchProviders]);
+
+  const handleToggle = async (id: string, isEnabled: boolean) => {
+    setProviders((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, is_enabled: isEnabled } : p))
+    );
+    try {
+      await fetch(`/api/settings/api-keys/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_enabled: isEnabled }),
+      });
+    } catch {
+      setProviders((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, is_enabled: !isEnabled } : p))
+      );
+    }
+  };
+
+  const handleDraftChange = (id: string, field: "apiKey" | "secondaryKey" | "modelName" | "baseUrl", value: string) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        [field]: value,
+      },
+    }));
+
+    // When user types or pastes an API key, automatically fetch live models
+    if (field === "apiKey" && value.length >= 6 && !value.includes("••••")) {
+      fetchModelsForProvider(id, value);
+    }
+    if (field === "baseUrl" && value.startsWith("http")) {
+      fetchModelsForProvider(id, undefined, value);
+    }
+  };
+
+  const handleSave = async (id: string) => {
+    setSavingId(id);
+    setSaveFeedback((prev) => ({ ...prev, [id]: { text: "" } }));
+    const draft = drafts[id] || {};
+    const body: Record<string, unknown> = {};
+
+    if (draft.apiKey !== undefined) body.api_key = draft.apiKey;
+    if (draft.secondaryKey !== undefined) body.secondary_key = draft.secondaryKey;
+    if (draft.modelName !== undefined) body.model_name = draft.modelName;
+    if (draft.baseUrl !== undefined) body.base_url = draft.baseUrl;
+
+    try {
+      const res = await fetch(`/api/settings/api-keys/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setProviders((prev) => prev.map((p) => (p.id === id ? data : p)));
+        setSaveFeedback((prev) => ({ ...prev, [id]: { text: "Saved successfully" } }));
+        setDrafts((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        // Re-fetch models using newly saved key
+        fetchModelsForProvider(id, data.masked_key || undefined, data.base_url || undefined);
+      } else {
+        setSaveFeedback((prev) => ({ ...prev, [id]: { text: data.error || "Save failed", error: true } }));
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSaveFeedback((prev) => ({ ...prev, [id]: { text: msg, error: true } }));
+    } finally {
+      setSavingId(null);
+      setTimeout(() => {
+        setSaveFeedback((prev) => ({ ...prev, [id]: { text: "" } }));
+      }, 3000);
+    }
+  };
+
+  const handleTest = async (id: string) => {
+    setTestingId(id);
+    const draft = drafts[id] || {};
+    const body: Record<string, unknown> = {};
+    if (draft.apiKey) body.api_key = draft.apiKey;
+    if (draft.modelName) body.model_name = draft.modelName;
+    if (draft.baseUrl) body.base_url = draft.baseUrl;
+
+    try {
+      const res = await fetch(`/api/settings/api-keys/test/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      setTestResults((prev) => ({ ...prev, [id]: data }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setTestResults((prev) => ({ ...prev, [id]: { success: false, message: msg } }));
+    } finally {
+      setTestingId(null);
+    }
+  };
+
+  const handleClearKey = async (id: string) => {
+    handleDraftChange(id, "apiKey", "");
+    await handleSave(id);
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Provider List */}
+      {providers.map((p) => {
+        const draft = drafts[p.id] || {};
+        const isTesting = testingId === p.id;
+        const isSaving = savingId === p.id;
+        const testRes = testResults[p.id];
+        const feedback = saveFeedback[p.id];
+        const isRevealed = showKey[p.id] ?? false;
+        const currentModel = draft.modelName !== undefined ? draft.modelName : p.model_name || "";
+        const isOllama = p.id === "ollama";
+        const isDirty = draft.apiKey !== undefined || draft.modelName !== undefined || draft.baseUrl !== undefined;
+
+        return (
+          <motion.div
+            key={p.id}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={spring.moderate}
+            className={cn(
+              "rounded-xl border p-4 sm:p-5 flex flex-col gap-4 transition-colors",
+              p.is_enabled
+                ? "border-border/80 bg-background/50 shadow-xs"
+                : "border-border/40 bg-muted/20 opacity-80"
+            )}
+          >
+            {/* Card Header with Monochrome Brand Logo */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-lg shrink-0 border transition-colors",
+                    p.is_enabled
+                      ? "bg-foreground/5 border-border/80 text-foreground"
+                      : "bg-muted/30 border-border/40 text-muted-foreground/60"
+                  )}
+                >
+                  {renderProviderLogo(p.id)}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4
+                      className="text-sm font-semibold text-foreground truncate"
+                      style={{ fontVariationSettings: fontWeights.semibold }}
+                    >
+                      {p.provider}
+                    </h4>
+                    {p.is_enabled ? (
+                      p.has_key || (isOllama && p.base_url) ? (
+                        <Badge color="emerald" variant="dot" size="compact">Active</Badge>
+                      ) : (
+                        <Badge color="amber" variant="dot" size="compact">Key Required</Badge>
+                      )
+                    ) : (
+                      <Badge color="gray" variant="dot" size="compact">Disabled</Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">{p.description}</p>
+                </div>
+              </div>
+
+              {/* On / Off Toggle */}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] font-medium text-muted-foreground hidden sm:inline">
+                  {p.is_enabled ? "ON" : "OFF"}
+                </span>
+                <Switch
+                  className={SWITCH_LABEL_HIDDEN}
+                  label={`Toggle ${p.provider}`}
+                  checked={p.is_enabled}
+                  onToggle={() => handleToggle(p.id, !p.is_enabled)}
+                  size="compact"
+                />
+              </div>
+            </div>
+
+            {/* Card Inputs */}
+            <div className="grid grid-cols-1 gap-3.5 pt-1">
+              {/* API Key field (for non-Ollama) */}
+              {!isOllama && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                      <HugeiconsIcon icon={Key01Icon} size={14} className="text-muted-foreground" />
+                      <span>API Key</span>
+                    </label>
+                    {p.has_key && draft.apiKey === undefined && (
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                        ✓ Key securely stored
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="relative flex items-center">
+                    <input
+                      type={isRevealed ? "text" : "password"}
+                      value={draft.apiKey !== undefined ? draft.apiKey : (p.masked_key || "")}
+                      onChange={(e) => handleDraftChange(p.id, "apiKey", e.target.value)}
+                      placeholder={p.has_key ? "Enter new key to replace..." : "Paste API key here..."}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-20 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                    />
+                    <div className="absolute right-1.5 flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="compact"
+                        onClick={() => setShowKey((prev) => ({ ...prev, [p.id]: !isRevealed }))}
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground cursor-pointer"
+                        title={isRevealed ? "Hide key" : "Show key"}
+                      >
+                        {isRevealed ? <EyeOff size={13} /> : <Eye size={13} />}
+                      </Button>
+                      {p.has_key && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="compact"
+                          onClick={() => handleClearKey(p.id)}
+                          className="h-7 px-1.5 text-[10px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Base URL (for Ollama) */}
+              {isOllama && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                    <OllamaLogoIcon size={14} className="text-muted-foreground" />
+                    <span>Ollama Host URL</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={draft.baseUrl !== undefined ? draft.baseUrl : (p.base_url || "http://localhost:11434")}
+                    onChange={(e) => handleDraftChange(p.id, "baseUrl", e.target.value)}
+                    placeholder="http://localhost:11434"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                  />
+                </div>
+              )}
+
+              {/* Skill-section style model dropdown with Free badges and search */}
+              <ModelCombobox
+                providerId={p.id}
+                value={currentModel}
+                onChange={(newModel) => handleDraftChange(p.id, "modelName", newModel)}
+                models={providerModels[p.id] || DEFAULT_PROVIDER_MODELS[p.id] || []}
+                isLoading={fetchingModels[p.id]}
+                onRefresh={() => fetchModelsForProvider(p.id, draft.apiKey || p.masked_key || undefined, draft.baseUrl || p.base_url || undefined)}
+              />
+            </div>
+
+            {/* Card Footer Actions & Feedback */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-border/40 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 max-w-full overflow-hidden">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="compact"
+                  onClick={() => handleTest(p.id)}
+                  disabled={isTesting}
+                  className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+                >
+                  <RefreshCw size={12} className={cn(isTesting && "animate-spin")} />
+                  <span>{isTesting ? "Testing..." : "Test Connection"}</span>
+                </Button>
+
+                {testRes && (
+                  <span
+                    title={testRes.message}
+                    className={cn(
+                      "text-[11.5px] font-medium truncate max-w-[200px] sm:max-w-[280px]",
+                      testRes.success ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+                    )}
+                  >
+                    {testRes.success ? `✓ ${testRes.message}` : `✕ ${testRes.message}`}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                {feedback?.text && (
+                  <span
+                    className={cn(
+                      "text-xs font-medium truncate max-w-[140px]",
+                      feedback.error ? "text-rose-600" : "text-emerald-600 dark:text-emerald-400"
+                    )}
+                  >
+                    {feedback.text}
+                  </span>
+                )}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="compact"
+                  onClick={() => handleSave(p.id)}
+                  disabled={isSaving || !isDirty}
+                  className="h-7 text-xs cursor-pointer shrink-0"
+                >
+                  {isSaving ? "Saving..." : isDirty ? "Save Provider" : "Saved ✓"}
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── 5. Database & Maintenance Control Panel ────────────────────────────────
 
 interface MaintenanceStats {
@@ -1640,7 +2357,7 @@ function DatabasePanel() {
         {/* Purge logo cache */}
         <SettingRow
           label="Clear cached employer logos"
-          description={`Flushes disk cache in web/public/logos so fresh logos re-resolve via Logo.dev.`}
+          description={`Flushes disk cache in data/logos so fresh logos re-resolve via our internal logo service.`}
         >
           <Button
             variant="secondary"

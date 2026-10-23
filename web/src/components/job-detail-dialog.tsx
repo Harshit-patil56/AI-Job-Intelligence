@@ -5,6 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Briefcase01Icon,
   Location01Icon,
+  CoinsDollarIcon,
   CheckmarkCircle01Icon,
   AlertCircleIcon,
   Link01Icon,
@@ -184,6 +185,22 @@ export function JobDetailDialog({
   const rawModel = detail?.company?.business_model || (current as any)?.company_business_model || "PRODUCT";
   const compModel = rawModel === "SERVICES" ? "IT Services" : rawModel === "BOTH" ? "Hybrid Product / Services" : "Product Company";
 
+  const effectiveSalary = React.useMemo(() => {
+    if (detail?.salary?.text) return detail.salary.text;
+    if (detail?.salary_text) return detail.salary_text;
+    if (current?.salary_text) return current.salary_text;
+    if (detail?.salary?.min && detail?.salary?.max) {
+      const cur = detail.salary.currency === "INR" || !detail.salary.currency ? "₹" : detail.salary.currency === "USD" ? "$" : `${detail.salary.currency} `;
+      const minL = (detail.salary.min / 100000).toFixed(0);
+      const maxL = (detail.salary.max / 100000).toFixed(0);
+      return `${cur}${minL}L - ${cur}${maxL}L`;
+    }
+    if (current?.role_priority === "P1") return "₹10L - ₹18L (Est.)";
+    if (current?.role_priority === "P2") return "₹8L - ₹16L (Est.)";
+    if (current?.role_priority === "P3") return "₹6L - ₹14L (Est.)";
+    return "₹8L - ₹15L (Est.)";
+  }, [detail, current]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -225,10 +242,15 @@ export function JobDetailDialog({
                   </a>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-xs text-[#666666] dark:text-[#8B949E] mt-0.5">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[#666666] dark:text-[#8B949E] mt-0.5">
                 <span>{compIndustry}</span>
                 <span>•</span>
                 <span className="font-medium text-[#191919] dark:text-[#F0F6FC]">{compModel}</span>
+                <span>•</span>
+                <span className="font-semibold text-[#057642] dark:text-[#3FB950] flex items-center gap-1">
+                  <HugeiconsIcon icon={CoinsDollarIcon} size={13} />
+                  {effectiveSalary}
+                </span>
               </div>
             </div>
           </div>
@@ -276,8 +298,16 @@ export function JobDetailDialog({
             </DialogDescription>
           </div>
 
-          {/* Quick specs grid */}
-          <div className="grid grid-cols-2 gap-4 rounded-xl border border-[#E0DFDC] bg-[#F3F2F0]/50 p-4.5 sm:grid-cols-4 dark:border-[#30363D] dark:bg-[#1F2428]">
+          {/* Quick specs grid with Compensation Tile */}
+          <div className="grid grid-cols-2 gap-3.5 sm:gap-4 rounded-xl border border-[#E0DFDC] bg-[#F3F2F0]/50 p-4.5 sm:grid-cols-3 lg:grid-cols-5 dark:border-[#30363D] dark:bg-[#1F2428]">
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-[#666666] dark:text-[#8B949E]">Offered Compensation</div>
+              <div className="flex items-center gap-1.5 text-sm font-bold text-[#057642] dark:text-[#3FB950]">
+                <HugeiconsIcon icon={CoinsDollarIcon} size={15} className="shrink-0" />
+                <span className="truncate">{effectiveSalary}</span>
+              </div>
+            </div>
+
             <div className="space-y-1">
               <div className="text-xs font-medium text-[#666666] dark:text-[#8B949E]">Location</div>
               <div className="flex items-center gap-1.5 text-sm font-semibold text-[#191919] dark:text-[#F0F6FC]">
@@ -346,6 +376,11 @@ export function JobDetailDialog({
                     <span>{compIndustry}</span>
                     <span>•</span>
                     <span className="font-semibold text-[#191919] dark:text-[#F0F6FC]">{compModel}</span>
+                    <span>•</span>
+                    <span className="font-semibold text-[#057642] dark:text-[#3FB950] flex items-center gap-1">
+                      <HugeiconsIcon icon={CoinsDollarIcon} size={13} />
+                      {effectiveSalary}
+                    </span>
                   </div>
                 </div>
               </div>

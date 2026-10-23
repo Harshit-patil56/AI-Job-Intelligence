@@ -1,16 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-
-// Official Logo.dev credentials from environment
-const PUBLIC_TOKEN =
-  process.env.LOGO_DEV_PUBLIC_KEY ||
-  process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN ||
-  "pk_Y4dZPtzsQeCVhx0WuHzfpw";
-
-const SECRET_KEY =
-  process.env.LOGO_DEV_SECRET_KEY ||
-  "sk_dhpuIc5hTiuM8yeA7DWwqA";
+import { KNOWN_DOMAINS } from "@/lib/logo";
 
 // Generic job aggregators whose domains must NEVER be treated as the employer's domain
 const JOB_PORTAL_HOSTS = [
@@ -44,7 +35,6 @@ function getLogosDir(): string {
   for (const dir of candidates) {
     if (fs.existsSync(dir)) return dir;
   }
-  // Create candidate 1
   try {
     fs.mkdirSync(candidates[0], { recursive: true });
     return candidates[0];
@@ -85,44 +75,6 @@ async function tryFetchBuffer(url: string, headers: Record<string, string> = {})
   } catch {
     return null;
   }
-}
-
-/**
- * Dynamically discover the real corporate domain via Logo.dev search API.
- * Avoids any hardcoding — discovers official company domain automatically.
- */
-async function discoverDomainWithLogoDev(companyName: string): Promise<string | null> {
-  try {
-    const cleanName = companyName
-      .replace(/^(jobspy|cutshort|hirist|instahyre|naukri|wellfound)\s*\([^)]*\)/gi, "")
-      .replace(/\b(advisory|technologies|solutions|services|pvt|ltd|limited|inc|llc|corp|corporation|holdings|india|hq|group)\b/gi, "")
-      .trim();
-
-    if (!cleanName || cleanName.length < 2) return null;
-
-    const query = encodeURIComponent(cleanName);
-    const searchUrl = `https://api.logo.dev/search?q=${query}`;
-
-    const res = await fetch(searchUrl, {
-      signal: AbortSignal.timeout(3000),
-      headers: {
-        Authorization: `Bearer ${SECRET_KEY}`,
-        Accept: "application/json",
-      },
-    });
-
-    if (!res.ok) return null;
-    const items = await res.json();
-    if (Array.isArray(items) && items.length > 0 && items[0]?.domain) {
-      const d = String(items[0].domain).toLowerCase().trim().replace(/^www\./, "");
-      if (d && !JOB_PORTAL_HOSTS.some((p) => d.includes(p))) {
-        return d;
-      }
-    }
-  } catch {
-    // Search lookup timeout or error
-  }
-  return null;
 }
 
 export async function GET(request: NextRequest) {
@@ -175,7 +127,7 @@ export async function GET(request: NextRequest) {
     // Continue to network fetch on disk read failure
   }
 
-  // 3. Resolve real company domain dynamically (No Hardcoding)
+  // 3. Resolve real company domain dynamically via our internal pipeline
   let resolvedDomain: string | null = null;
 
   // Case A: Domain passed as param and not a job aggregator host
@@ -197,9 +149,9 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Case C: Dynamic Logo.dev Search API discovery using Secret Key
-  if (!resolvedDomain) {
-    resolvedDomain = await discoverDomainWithLogoDev(company);
+  // Case C: Look up known dictionary
+  if (!resolvedDomain && KNOWN_DOMAINS[slug]) {
+    resolvedDomain = KNOWN_DOMAINS[slug];
   }
 
   // Case D: Clean company heuristic fallback (e.g. elchemy -> elchemy.com)
@@ -212,14 +164,16 @@ export async function GET(request: NextRequest) {
     return new NextResponse("Logo not found", { status: 404 });
   }
 
-  // 4. Download real brand logo via Logo.dev API
+  // 4. Download real brand logo using our multi-tier free CDN cascade
   const candidateUrls = [
-    // Source 1: High-res square brand logo from Logo.dev using user token
-    `https://img.logo.dev/${resolvedDomain}?token=${PUBLIC_TOKEN}&size=128&format=png&retina=true`,
+    // Source 1: Google High-Res Favicon CDN (128px)
+    `https://www.google.com/s2/favicons?domain=${resolvedDomain}&sz=128`,
     // Source 2: Direct Apple Touch Icon (high-res square icon from corporate site)
     `https://${resolvedDomain}/apple-touch-icon.png`,
-    // Source 3: Google Favicon CDN (128px)
-    `https://www.google.com/s2/favicons?domain=${resolvedDomain}&sz=128`,
+    // Source 3: DuckDuckGo Icons CDN
+    `https://icons.duckduckgo.com/ip3/${resolvedDomain}.ico`,
+    // Source 4: Root site favicon fallback
+    `https://${resolvedDomain}/favicon.ico`,
   ];
 
   for (const url of candidateUrls) {

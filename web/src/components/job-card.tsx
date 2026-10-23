@@ -11,6 +11,7 @@ import {
   Link01Icon,
   Layers01Icon,
   Time02Icon,
+  CoinsDollarIcon,
 } from "@hugeicons/core-free-icons";
 import { useRegisterFluidHoverItem } from "@/hooks/use-fluid-hover";
 import { fontWeights } from "@/lib/font-weight";
@@ -63,6 +64,31 @@ export function JobCard({
       })
     : "Active";
 
+  // Salary / Offer Money resolution
+  const salaryDisplay = React.useMemo(() => {
+    if (job.salary_text && !job.salary_text.toLowerCase().startsWith("nan")) {
+      return job.salary_text;
+    }
+    if (job.salary_min != null) {
+      const curr = (job.salary_currency || "INR").toUpperCase();
+      if (curr === "INR") {
+        const minL = (job.salary_min / 100000).toFixed(1).replace(/\.0$/, "");
+        const maxL = job.salary_max ? (job.salary_max / 100000).toFixed(1).replace(/\.0$/, "") : null;
+        return maxL && maxL !== minL ? `₹${minL}L - ₹${maxL}L` : `₹${minL}L+`;
+      }
+      if (curr === "USD" || curr === "$") {
+        const minK = Math.round(job.salary_min / 1000);
+        const maxK = job.salary_max ? Math.round(job.salary_max / 1000) : null;
+        return maxK && maxK !== minK ? `$${minK}k - $${maxK}k` : `$${minK}k+`;
+      }
+    }
+    // Market estimate fallback
+    if (job.role_priority === "P1") return "₹12L - ₹25L (Est.)";
+    if (job.role_priority === "P2") return "₹10L - ₹20L (Est.)";
+    if (job.role_priority === "P3") return "₹8L - ₹16L (Est.)";
+    return null;
+  }, [job.salary_text, job.salary_min, job.salary_max, job.salary_currency, job.role_priority]);
+
   const isVerified = job.verification_confidence >= 0.9;
   const isReview = job.status === "REVIEW";
 
@@ -78,7 +104,7 @@ export function JobCard({
       }`}
     >
       <div>
-        {/* Top header: Logo from logo.dev, Company, Verification, Priority */}
+        {/* Top header: Company Logo, Company Name, Verification, Priority */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             {/* Real Company Avatar with 4-Tier Free-First Cascade */}
@@ -204,9 +230,23 @@ export function JobCard({
 
       {/* Footer Actions: Audit Button and Direct Apply Button */}
       <div className="mt-4 flex items-center justify-between border-t border-[#E0DFDC] pt-3 dark:border-[#30363D]">
-        <div className="flex items-center gap-1 text-[11px] font-medium text-[#666666] dark:text-[#8B949E]">
-          <HugeiconsIcon icon={Time02Icon} size={13} />
-          <span>{formattedDate}</span>
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#666666] dark:text-[#8B949E] min-w-0">
+          <span className="flex items-center gap-1 shrink-0">
+            <HugeiconsIcon icon={Time02Icon} size={13} />
+            <span>{formattedDate}</span>
+          </span>
+          {salaryDisplay && (
+            <>
+              <span className="text-[#999999] dark:text-[#666666] shrink-0">•</span>
+              <span
+                className="inline-flex items-center gap-1 font-semibold text-[#057642] dark:text-[#3FB950] truncate"
+                title={`Compensation Offer: ${salaryDisplay}`}
+              >
+                <HugeiconsIcon icon={CoinsDollarIcon} size={13} className="shrink-0" />
+                <span className="truncate">{salaryDisplay}</span>
+              </span>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

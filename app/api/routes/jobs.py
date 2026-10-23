@@ -15,6 +15,7 @@ from app.ai.gateway import LLMGateway
 from app.models.database import get_db_session
 from app.models.entities import Company, Job, JobSourceReference
 from app.models.schemas import JobStatus, RolePriority
+from app.normalization.salary_parser import estimate_market_salary, format_salary_display
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
@@ -134,6 +135,19 @@ async def list_jobs(
 
     items = []
     for j in jobs:
+        eff_salary_text = j.salary_text
+        if not eff_salary_text:
+            if j.salary_min is not None:
+                eff_salary_text = format_salary_display(
+                    float(j.salary_min),
+                    float(j.salary_max) if j.salary_max is not None else float(j.salary_min),
+                    j.salary_currency,
+                    j.salary_period,
+                )
+            else:
+                est = estimate_market_salary(j.role_priority, j.experience_min, j.experience_max, j.location)
+                eff_salary_text = est.salary_text
+
         items.append({
             "id": j.id,
             "company_name": j.company.name if j.company else "Unknown",
@@ -149,6 +163,7 @@ async def list_jobs(
             "salary_max": float(j.salary_max) if j.salary_max is not None else None,
             "salary_currency": j.salary_currency,
             "salary_period": j.salary_period,
+            "salary_text": eff_salary_text,
             "status": j.status,
             "rejection_reason": j.rejection_reason,
             "review_reason": j.review_reason,
@@ -245,7 +260,8 @@ async def get_job_detail(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    latest_ai = job.ai_results[-1] if job.ai_results else None
+    valid_ai_results = [r for r in job.ai_results if r.provider != "FALLBACK_HEURISTIC"]
+    latest_ai = valid_ai_results[-1] if valid_ai_results else None
 
     return {
         "id": job.id,
@@ -271,8 +287,27 @@ async def get_job_detail(
             "max": float(job.salary_max) if job.salary_max is not None else None,
             "currency": job.salary_currency,
             "period": job.salary_period,
-            "text": job.salary_text,
+            "text": job.salary_text or (
+                format_salary_display(
+                    float(job.salary_min),
+                    float(job.salary_max) if job.salary_max is not None else float(job.salary_min),
+                    job.salary_currency,
+                    job.salary_period,
+                )
+                if job.salary_min is not None
+                else estimate_market_salary(job.role_priority, job.experience_min, job.experience_max, job.location).salary_text
+            ),
         },
+        "salary_text": job.salary_text or (
+            format_salary_display(
+                float(job.salary_min),
+                float(job.salary_max) if job.salary_max is not None else float(job.salary_min),
+                job.salary_currency,
+                job.salary_period,
+            )
+            if job.salary_min is not None
+            else estimate_market_salary(job.role_priority, job.experience_min, job.experience_max, job.location).salary_text
+        ),
         "status": job.status,
         "rejection_reason": job.rejection_reason,
         "review_reason": job.review_reason,
@@ -395,8 +430,9 @@ async def generate_copilot_pack(
         raise HTTPException(status_code=404, detail="Job not found")
 
     extracted_skills = []
-    if job.ai_results and job.ai_results[-1].output_payload:
-        extracted_skills = job.ai_results[-1].output_payload.get("extracted_skills", [])
+    valid_ai = [r for r in job.ai_results if r.provider != "FALLBACK_HEURISTIC"]
+    if valid_ai and valid_ai[-1].output_payload:
+        extracted_skills = valid_ai[-1].output_payload.get("extracted_skills", [])
 
     # Fetch active candidate profile if present
     from app.models.entities import CandidateProfile
@@ -411,5 +447,6 @@ async def generate_copilot_pack(
         description=job.description or "",
         extracted_skills=extracted_skills,
         candidate_profile=candidate_profile,
+        session=session,
     )
     return pack

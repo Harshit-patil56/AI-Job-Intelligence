@@ -20,7 +20,12 @@ import {
   HelpCircleIcon,
   Shield01Icon,
   Home01Icon,
+  Key01Icon,
+  AlertCircleIcon,
 } from "@hugeicons/core-free-icons";
+import { motion, AnimatePresence } from "motion/react";
+import { spring } from "@/lib/springs";
+import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -36,6 +41,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "lucide-react";
 import { isValidCompanyWebsite } from "@/lib/urls";
+import { SettingsDialog } from "@/components/dialog-sidebar/settings-dialog";
+import { fontWeights } from "@/lib/font-weight";
 import type { JobDetail, CopilotApplicationPack } from "@/lib/types";
 
 function formatRoleVerdict(verdict?: string | null): string {
@@ -100,9 +107,12 @@ function JobDetailInner() {
   const [isUpdatingStatus, setIsUpdatingStatus] = React.useState(false);
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
   const [aiData, setAiData] = React.useState<JobDetail["ai_analysis"]>(null);
+  const [aiError, setAiError] = React.useState<string | null>(null);
   const [copilotPack, setCopilotPack] = React.useState<CopilotApplicationPack | null>(null);
+  const [copilotError, setCopilotError] = React.useState<string | null>(null);
   const [isGeneratingPack, setIsGeneratingPack] = React.useState(false);
   const [copiedField, setCopiedField] = React.useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (!id) return;
@@ -154,10 +164,13 @@ function JobDetailInner() {
   const handleAnalyzeJob = async () => {
     if (!job || isAnalyzing) return;
     setIsAnalyzing(true);
+    setAiError(null);
     try {
       const res = await fetch(`/api/jobs/${job.id}/analyze`, { method: "POST" });
-      if (res.ok) {
-        const result = await res.json();
+      const result = await res.json();
+      if (!res.ok) {
+        setAiError(result.detail || result.error || "No active AI provider configured or available");
+      } else {
         setAiData({
           id: result.input_hash,
           provider: result.provider,
@@ -168,8 +181,9 @@ function JobDetailInner() {
           from_cache: result.from_cache,
         });
       }
-    } catch (err) {
-      console.error("AI Analysis failed", err);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setAiError(msg || "Failed to invoke AI analysis");
     } finally {
       setIsAnalyzing(false);
     }
@@ -178,14 +192,18 @@ function JobDetailInner() {
   const handleGenerateCopilotPack = async () => {
     if (!job || isGeneratingPack) return;
     setIsGeneratingPack(true);
+    setCopilotError(null);
     try {
       const res = await fetch(`/api/jobs/${job.id}/copilot-pack`, { method: "POST" });
-      if (res.ok) {
-        const pack = await res.json();
+      const pack = await res.json();
+      if (!res.ok) {
+        setCopilotError(pack.detail || pack.error || "No active AI provider configured or available");
+      } else {
         setCopilotPack(pack);
       }
-    } catch (err) {
-      console.error("Copilot generation failed", err);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setCopilotError(msg || "Failed to generate Copilot pack");
     } finally {
       setIsGeneratingPack(false);
     }
@@ -233,6 +251,21 @@ function JobDetailInner() {
   const isP2 = job.role_priority === "P2";
   const isVerified = job.verification_confidence >= 0.9;
 
+  const effectiveSalary = React.useMemo(() => {
+    if (job?.salary?.text) return job.salary.text;
+    if (job?.salary_text) return job.salary_text;
+    if (job?.salary?.min && job?.salary?.max) {
+      const cur = job.salary.currency === "INR" || !job.salary.currency ? "₹" : job.salary.currency === "USD" ? "$" : `${job.salary.currency} `;
+      const minL = (job.salary.min / 100000).toFixed(0);
+      const maxL = (job.salary.max / 100000).toFixed(0);
+      return `${cur}${minL}L - ${cur}${maxL}L`;
+    }
+    if (job?.role_priority === "P1") return "₹10L - ₹18L (Est.)";
+    if (job?.role_priority === "P2") return "₹8L - ₹16L (Est.)";
+    if (job?.role_priority === "P3") return "₹6L - ₹14L (Est.)";
+    return "₹8L - ₹15L (Est.)";
+  }, [job]);
+
   return (
     <div className="min-h-screen bg-[#F3F2F0] dark:bg-[#1B1F23] text-[#191919] dark:text-[#F0F6FC]">
       <header className="sticky top-0 z-30 w-full bg-[#F3F2F0]/95 dark:bg-[#1B1F23]/95 backdrop-blur-md py-2 sm:py-3.5 px-2.5 sm:px-6">
@@ -279,7 +312,12 @@ function JobDetailInner() {
             </Breadcrumb>
           </div>
 
-          <div className="shrink-0">
+          <div className="shrink-0 flex items-center gap-2">
+            <FluidActionButton
+              icon={<HugeiconsIcon icon={Key01Icon} size={14} />}
+              label="API settings"
+              onClick={() => setIsSettingsOpen(true)}
+            />
             <FluidActionButton
               icon={<HugeiconsIcon icon={Share01Icon} size={14} />}
               label="Share"
@@ -345,15 +383,11 @@ function JobDetailInner() {
                     <HugeiconsIcon icon={Briefcase01Icon} size={14} />
                     {job.experience?.text || job.experience_text || `${job.experience_min ?? 0}-${job.experience_max ?? 2} yrs`}
                   </span>
-                  {(job.salary?.text || job.salary_text) && (
-                    <>
-                      <span>•</span>
-                      <span className="flex items-center gap-1 text-[#057642] font-semibold dark:text-[#3FB950]">
-                        <HugeiconsIcon icon={CoinsDollarIcon} size={14} />
-                        {job.salary?.text || job.salary_text}
-                      </span>
-                    </>
-                  )}
+                  <span>•</span>
+                  <span className="flex items-center gap-1 text-[#057642] font-semibold dark:text-[#3FB950]">
+                    <HugeiconsIcon icon={CoinsDollarIcon} size={14} />
+                    {effectiveSalary}
+                  </span>
                 </div>
               </div>
             </div>
@@ -408,6 +442,62 @@ function JobDetailInner() {
           </div>
         </section>
 
+        {/* Role & Company Overview Quick Specs Grid */}
+        <section className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 rounded-xl border border-[#E0DFDC] bg-white p-4.5 sm:p-5 shadow-xs dark:border-[#30363D] dark:bg-[#24292E]">
+          <div className="space-y-1">
+            <div className="text-xs font-medium text-[#666666] dark:text-[#8B949E]">Offered Compensation</div>
+            <div className="flex items-center gap-1.5 text-sm sm:text-base font-bold text-[#057642] dark:text-[#3FB950]">
+              <HugeiconsIcon icon={CoinsDollarIcon} size={16} className="shrink-0" />
+              <span className="truncate">{effectiveSalary}</span>
+            </div>
+            <div className="text-[11px] text-[#888888] dark:text-[#7D8590]">
+              {job.salary?.min ? "Annual Disclosed CTC" : "Market Benchmark Range"}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-xs font-medium text-[#666666] dark:text-[#8B949E]">Experience Level</div>
+            <div className="flex items-center gap-1.5 text-sm sm:text-base font-semibold text-[#191919] dark:text-[#F0F6FC]">
+              <HugeiconsIcon icon={Briefcase01Icon} size={16} className="text-[#666666] shrink-0" />
+              <span className="truncate">{job.experience?.text || job.experience_text || `${job.experience_min ?? 0}-${job.experience_max ?? 2} yrs`}</span>
+            </div>
+            <div className="text-[11px] text-[#888888] dark:text-[#7D8590]">
+              {isP1 ? "Early Career / GenAI Target" : "Standard Experience Band"}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-xs font-medium text-[#666666] dark:text-[#8B949E]">Workplace Location</div>
+            <div className="flex items-center gap-1.5 text-sm sm:text-base font-semibold text-[#191919] dark:text-[#F0F6FC]">
+              <HugeiconsIcon icon={Location01Icon} size={16} className="text-[#0A66C2] shrink-0" />
+              <span className="truncate">{job.location || "Remote / India"}</span>
+            </div>
+            <div className="text-[11px] text-[#888888] dark:text-[#7D8590]">
+              {compModel}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-xs font-medium text-[#666666] dark:text-[#8B949E]">Employer Provenance</div>
+            <div className="flex items-center gap-1.5 text-sm sm:text-base font-semibold">
+              {isVerified ? (
+                <span className="flex items-center gap-1.5 text-[#057642] dark:text-[#3FB950]">
+                  <HugeiconsIcon icon={CheckmarkCircle01Icon} size={16} strokeWidth={2.5} className="shrink-0" />
+                  <span>Verified ({Math.round(job.verification_confidence * 100)}%)</span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-[#B24020]">
+                  <HugeiconsIcon icon={AlertCircleIcon} size={16} strokeWidth={2} className="shrink-0" />
+                  <span>Review ({Math.round(job.verification_confidence * 100)}%)</span>
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-[#888888] dark:text-[#7D8590]">
+              {compIndustry}
+            </div>
+          </div>
+        </section>
+
         {/* High-Signal AI Intelligence & Skill Gap Evaluation */}
         <section className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/60 to-indigo-50/40 p-4 sm:p-6 dark:border-blue-900/40 dark:from-[#1F2633] dark:to-[#1B222E] space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -417,91 +507,182 @@ function JobDetailInner() {
                 AI Intelligence & Skill Gap Analysis
               </h3>
             </div>
-            {!aiData && (
+            {!aiData && !isAnalyzing && (
               <Button
                 variant="secondary"
                 size="compact"
                 onClick={handleAnalyzeJob}
-                disabled={isAnalyzing}
                 className="text-xs self-start sm:self-auto shrink-0"
               >
-                {isAnalyzing ? "Evaluating JD..." : "Run AI Intelligence"}
+                Run AI Intelligence
               </Button>
             )}
           </div>
 
-          {aiData?.payload ? (
-            <div className="space-y-4 text-xs">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className={`px-2.5 py-1 rounded-md font-semibold ${
-                  aiData.payload.role_verdict === "ELIGIBLE"
-                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                    : aiData.payload.role_verdict === "REVIEW"
-                    ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                    : "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300"
-                }`}>
-                  Verdict: {formatRoleVerdict(aiData.payload.role_verdict)}
-                </span>
-                <span className="text-muted-foreground">
-                  Experience fit: <strong className="text-foreground">{formatExperienceFit(aiData.payload.experience_fit)}</strong>
-                </span>
-                <span className="text-muted-foreground">
-                  Confidence: <strong className="text-foreground">{Math.round((aiData.payload.confidence ?? 0.85) * 100)}%</strong>
-                </span>
-                {aiData.from_cache && (
-                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
-                    ⚡ Instant (ADR-009 SHA-256 Cache Hit)
+          <AnimatePresence mode="wait">
+            {isAnalyzing && (
+              <motion.div
+                key="analyzing"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4, transition: spring.moderate.exit }}
+                transition={spring.moderate}
+                className="py-3 px-4 rounded-xl bg-white/80 dark:bg-zinc-900/60 border border-blue-200/60 dark:border-blue-900/40 shadow-xs"
+              >
+                <ThinkingIndicator
+                  words={[
+                    "Querying LLM Gateway",
+                    "Parsing JD Tech Requirements",
+                    "Evaluating Seniority Fit",
+                    "Synthesizing Skill Gap Matrix",
+                  ]}
+                  size="compact"
+                />
+              </motion.div>
+            )}
+
+            {!isAnalyzing && aiError && (
+              <motion.div
+                key="ai-error"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4, transition: spring.moderate.exit }}
+                transition={spring.moderate}
+                className="rounded-xl border border-rose-200 bg-rose-50/80 p-4 dark:border-rose-900/50 dark:bg-rose-950/30 space-y-3"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300 shrink-0 mt-0.5">
+                    <HugeiconsIcon icon={Key01Icon} size={18} />
+                  </div>
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <h4
+                      className="text-xs font-semibold text-rose-900 dark:text-rose-200"
+                      style={{ fontVariationSettings: fontWeights.semibold }}
+                    >
+                      AI provider required
+                    </h4>
+                    <p className="text-xs text-rose-800 dark:text-rose-300 leading-relaxed font-normal">
+                      {aiError}
+                    </p>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white/80 dark:bg-zinc-900/70 p-3 rounded-lg border border-rose-200/60 dark:border-rose-900/40 mt-1">
+                      <span className="text-[12px] text-zinc-600 dark:text-zinc-300 leading-normal">
+                        Add your Google Gemini, Groq, OpenRouter, or local Ollama credentials in Profile → API, then toggle the provider on.
+                      </span>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="compact"
+                        onClick={() => setIsSettingsOpen(true)}
+                        className="text-xs shrink-0 gap-1.5 font-medium cursor-pointer"
+                      >
+                        <HugeiconsIcon icon={Key01Icon} size={13} />
+                        <span>Open API settings</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-end pt-0.5">
+                  <Button
+                    variant="secondary"
+                    size="compact"
+                    onClick={handleAnalyzeJob}
+                    className="text-xs border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 hover:bg-rose-100 dark:hover:bg-rose-900/40 cursor-pointer"
+                  >
+                    <HugeiconsIcon icon={ArrowReloadHorizontalIcon} size={13} className="mr-1.5" />
+                    Retry analysis
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
+            {!isAnalyzing && !aiError && aiData?.payload && (
+              <motion.div
+                key="ai-payload"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4, transition: spring.moderate.exit }}
+                transition={spring.moderate}
+                className="space-y-4 text-xs"
+              >
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className={`px-2.5 py-1 rounded-md font-semibold ${
+                    aiData.payload.role_verdict === "ELIGIBLE"
+                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                      : aiData.payload.role_verdict === "REVIEW"
+                      ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                      : "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300"
+                  }`}>
+                    Verdict: {formatRoleVerdict(aiData.payload.role_verdict)}
                   </span>
+                  <span className="text-muted-foreground">
+                    Experience fit: <strong className="text-foreground">{formatExperienceFit(aiData.payload.experience_fit)}</strong>
+                  </span>
+                  <span className="text-muted-foreground">
+                    Confidence: <strong className="text-foreground">{Math.round((aiData.payload.confidence ?? 0.85) * 100)}%</strong>
+                  </span>
+                  {aiData.from_cache && (
+                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                      ⚡ Instant (ADR-009 SHA-256 Cache Hit)
+                    </span>
+                  )}
+                </div>
+
+                {aiData.payload.reasoning && (
+                  <p className="text-zinc-600 dark:text-zinc-300 italic bg-white/70 dark:bg-zinc-900/50 p-3 rounded-lg border border-blue-100 dark:border-zinc-800">
+                    &ldquo;{aiData.payload.reasoning}&rdquo;
+                  </p>
                 )}
-              </div>
 
-              {aiData.payload.reasoning && (
-                <p className="text-zinc-600 dark:text-zinc-300 italic bg-white/70 dark:bg-zinc-900/50 p-3 rounded-lg border border-blue-100 dark:border-zinc-800">
-                  &ldquo;{aiData.payload.reasoning}&rdquo;
-                </p>
-              )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  <div className="space-y-1.5">
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                      Matched core skills:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {aiData.payload.extracted_skills?.length ? (
+                        aiData.payload.extracted_skills.map((sk: string) => (
+                          <span key={sk} className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                            {sk}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">None extracted</span>
+                      )}
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                <div className="space-y-1.5">
-                  <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                    Matched core skills:
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {aiData.payload.extracted_skills?.length ? (
-                      aiData.payload.extracted_skills.map((sk: string) => (
-                        <span key={sk} className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
-                          {sk}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-muted-foreground">None extracted</span>
-                    )}
+                  <div className="space-y-1.5">
+                    <span className="font-semibold text-rose-700 dark:text-rose-400">
+                      Identified skill gap:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {aiData.payload.missing_skills?.length ? (
+                        aiData.payload.missing_skills.map((sk: string) => (
+                          <span key={sk} className="px-2 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800">
+                            {sk}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-medium">Zero skill gap identified</span>
+                      )}
+                    </div>
                   </div>
                 </div>
+              </motion.div>
+            )}
 
-                <div className="space-y-1.5">
-                  <span className="font-semibold text-rose-700 dark:text-rose-400">
-                    Identified skill gap:
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {aiData.payload.missing_skills?.length ? (
-                      aiData.payload.missing_skills.map((sk: string) => (
-                        <span key={sk} className="px-2 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800">
-                          {sk}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">Zero skill gap identified</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Click &ldquo;Run AI Intelligence&rdquo; to evaluate role compatibility, skill gaps, and early-career fit via deterministic composite cache.
-            </p>
-          )}
+            {!isAnalyzing && !aiError && !aiData?.payload && (
+              <motion.p
+                key="ai-idle"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="text-xs text-muted-foreground"
+              >
+                Click &ldquo;Run AI Intelligence&rdquo; to evaluate role compatibility, skill gaps, and early-career fit via live LLM inference.
+              </motion.p>
+            )}
+          </AnimatePresence>
         </section>
 
         {/* Application Copilot Suite (Resume, Cover Note, Interview Prep) */}
@@ -513,87 +694,180 @@ function JobDetailInner() {
                 Application Copilot Suite
               </h3>
             </div>
-            <Button
-              variant="secondary"
-              size="compact"
-              onClick={handleGenerateCopilotPack}
-              disabled={isGeneratingPack}
-              className="text-xs self-start sm:self-auto shrink-0"
-            >
-              {isGeneratingPack ? "Synthesizing Copilot Pack..." : copilotPack ? "Regenerate Pack" : "Generate Copilot Pack"}
-            </Button>
+            {!isGeneratingPack && (
+              <Button
+                variant="secondary"
+                size="compact"
+                onClick={handleGenerateCopilotPack}
+                className="text-xs self-start sm:self-auto shrink-0"
+              >
+                {copilotPack ? "Regenerate Pack" : "Generate Copilot Pack"}
+              </Button>
+            )}
           </div>
 
-          {copilotPack ? (
-            <div className="space-y-5 pt-1 text-xs">
-              {/* Tailored Bullets */}
-              <div className="space-y-2 bg-white dark:bg-zinc-900/70 p-4 rounded-xl border border-purple-100 dark:border-zinc-800">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                    Tailored resume bullet points (Action + Tech + Impact):
-                  </span>
-                  <FluidActionButton
-                    icon={<HugeiconsIcon icon={Copy01Icon} size={13} />}
-                    label="Copy All"
-                    activeLabel="Copied"
-                    isActive={copiedField === "bullets"}
-                    onClick={() => handleCopyText(copilotPack.tailored_bullets.join("\n"), "bullets")}
-                  />
-                </div>
-                <ul className="space-y-1.5 text-zinc-700 dark:text-zinc-300">
-                  {copilotPack.tailored_bullets.map((b, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <span className="text-purple-600 dark:text-purple-400 font-bold">•</span>
-                      <span>{b}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          <AnimatePresence mode="wait">
+            {isGeneratingPack && (
+              <motion.div
+                key="generating"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4, transition: spring.moderate.exit }}
+                transition={spring.moderate}
+                className="py-3 px-4 rounded-xl bg-white/80 dark:bg-zinc-900/60 border border-purple-200/60 dark:border-purple-900/40 shadow-xs"
+              >
+                <ThinkingIndicator
+                  words={[
+                    "Querying Copilot LLM",
+                    "Synthesizing Tailored Resume Bullets",
+                    "Composing Recruiter Outreach Note",
+                    "Generating Technical Interview Talking Points",
+                  ]}
+                  size="compact"
+                />
+              </motion.div>
+            )}
 
-              {/* Cover Note */}
-              <div className="space-y-2 bg-white dark:bg-zinc-900/70 p-4 rounded-xl border border-purple-100 dark:border-zinc-800">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                    Outreach cover note (120–150 words):
-                  </span>
-                  <FluidActionButton
-                    icon={<HugeiconsIcon icon={Copy01Icon} size={13} />}
-                    label="Copy Note"
-                    activeLabel="Copied"
-                    isActive={copiedField === "cover"}
-                    onClick={() => handleCopyText(copilotPack.cover_note, "cover")}
-                  />
-                </div>
-                <p className="whitespace-pre-line text-zinc-700 dark:text-zinc-300 leading-relaxed font-sans">
-                  {copilotPack.cover_note}
-                </p>
-              </div>
-
-              {/* Interview Q&A */}
-              <div className="space-y-2 bg-white dark:bg-zinc-900/70 p-4 rounded-xl border border-purple-100 dark:border-zinc-800">
-                <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                  Targeted interview prep questions & model talking points:
-                </span>
-                <div className="space-y-2.5 pt-1">
-                  {copilotPack.interview_qa.map((qa, i) => (
-                    <div key={i} className="rounded-lg bg-zinc-50 dark:bg-zinc-800/60 p-3 space-y-1">
-                      <div className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-start gap-1.5">
-                        <span className="text-purple-600 dark:text-purple-400">Q{i + 1}:</span>
-                        <span>{qa.question}</span>
-                      </div>
-                      <div className="text-muted-foreground pl-5 text-[11.5px]">
-                        <strong className="text-foreground">Model talking points:</strong> {qa.talking_points}
-                      </div>
+            {!isGeneratingPack && copilotError && (
+              <motion.div
+                key="copilot-error"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4, transition: spring.moderate.exit }}
+                transition={spring.moderate}
+                className="rounded-xl border border-rose-200 bg-rose-50/80 p-4 dark:border-rose-900/50 dark:bg-rose-950/30 space-y-3"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300 shrink-0 mt-0.5">
+                    <HugeiconsIcon icon={Key01Icon} size={18} />
+                  </div>
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <h4
+                      className="text-xs font-semibold text-rose-900 dark:text-rose-200"
+                      style={{ fontVariationSettings: fontWeights.semibold }}
+                    >
+                      AI provider required
+                    </h4>
+                    <p className="text-xs text-rose-800 dark:text-rose-300 leading-relaxed font-normal">
+                      {copilotError}
+                    </p>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white/80 dark:bg-zinc-900/70 p-3 rounded-lg border border-rose-200/60 dark:border-rose-900/40 mt-1">
+                      <span className="text-[12px] text-zinc-600 dark:text-zinc-300 leading-normal">
+                        Add your Google Gemini, Groq, OpenRouter, or local Ollama credentials in Profile → API, then toggle the provider on.
+                      </span>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="compact"
+                        onClick={() => setIsSettingsOpen(true)}
+                        className="text-xs shrink-0 gap-1.5 font-medium cursor-pointer"
+                      >
+                        <HugeiconsIcon icon={Key01Icon} size={13} />
+                        <span>Open API settings</span>
+                      </Button>
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Synthesize 3 customized resume bullet points, an elevator outreach pitch, and 3 role-specific technical interview questions.
-            </p>
-          )}
+                <div className="flex justify-end pt-0.5">
+                  <Button
+                    variant="secondary"
+                    size="compact"
+                    onClick={handleGenerateCopilotPack}
+                    className="text-xs border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 hover:bg-rose-100 dark:hover:bg-rose-900/40 cursor-pointer"
+                  >
+                    <HugeiconsIcon icon={ArrowReloadHorizontalIcon} size={13} className="mr-1.5" />
+                    Retry copilot generation
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
+            {!isGeneratingPack && !copilotError && copilotPack && (
+              <motion.div
+                key="copilot-pack"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4, transition: spring.moderate.exit }}
+                transition={spring.moderate}
+                className="space-y-5 pt-1 text-xs"
+              >
+                {/* Tailored Bullets */}
+                <div className="space-y-2 bg-white dark:bg-zinc-900/70 p-4 rounded-xl border border-purple-100 dark:border-zinc-800">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                      Tailored resume bullet points (Action + Tech + Impact):
+                    </span>
+                    <FluidActionButton
+                      icon={<HugeiconsIcon icon={Copy01Icon} size={13} />}
+                      label="Copy All"
+                      activeLabel="Copied"
+                      isActive={copiedField === "bullets"}
+                      onClick={() => handleCopyText(copilotPack.tailored_bullets.join("\n"), "bullets")}
+                    />
+                  </div>
+                  <ul className="space-y-1.5 text-zinc-700 dark:text-zinc-300">
+                    {copilotPack.tailored_bullets.map((b, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="text-purple-600 dark:text-purple-400 font-bold">•</span>
+                        <span>{b}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Cover Note */}
+                <div className="space-y-2 bg-white dark:bg-zinc-900/70 p-4 rounded-xl border border-purple-100 dark:border-zinc-800">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                      Outreach cover note (120–150 words):
+                    </span>
+                    <FluidActionButton
+                      icon={<HugeiconsIcon icon={Copy01Icon} size={13} />}
+                      label="Copy Note"
+                      activeLabel="Copied"
+                      isActive={copiedField === "cover"}
+                      onClick={() => handleCopyText(copilotPack.cover_note, "cover")}
+                    />
+                  </div>
+                  <p className="whitespace-pre-line text-zinc-700 dark:text-zinc-300 leading-relaxed font-sans">
+                    {copilotPack.cover_note}
+                  </p>
+                </div>
+
+                {/* Interview Q&A */}
+                <div className="space-y-2 bg-white dark:bg-zinc-900/70 p-4 rounded-xl border border-purple-100 dark:border-zinc-800">
+                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                    Targeted interview prep questions & model talking points:
+                  </span>
+                  <div className="space-y-2.5 pt-1">
+                    {copilotPack.interview_qa.map((qa, i) => (
+                      <div key={i} className="rounded-lg bg-zinc-50 dark:bg-zinc-800/60 p-3 space-y-1">
+                        <div className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-start gap-1.5">
+                          <span className="text-purple-600 dark:text-purple-400">Q{i + 1}:</span>
+                          <span>{qa.question}</span>
+                        </div>
+                        <div className="text-muted-foreground pl-5 text-[11.5px]">
+                          <strong className="text-foreground">Model talking points:</strong> {qa.talking_points}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {!isGeneratingPack && !copilotError && !copilotPack && (
+              <motion.p
+                key="copilot-idle"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="text-xs text-muted-foreground"
+              >
+                Synthesize 3 customized resume bullet points, an elevator outreach pitch, and 3 role-specific technical interview questions via live LLM inference.
+              </motion.p>
+            )}
+          </AnimatePresence>
         </section>
 
         {/* Clean Job Description (720px optimal reading measure) */}
@@ -642,6 +916,13 @@ function JobDetailInner() {
           </section>
         )}
       </main>
+
+      {/* Settings / API Modal */}
+      <SettingsDialog
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+        defaultSection="api"
+      />
     </div>
   );
 }

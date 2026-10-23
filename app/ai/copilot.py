@@ -62,6 +62,7 @@ class CopilotService:
         description: str,
         extracted_skills: Optional[List[str]] = None,
         candidate_profile: Optional[Any] = None,
+        session: Optional[Any] = None,
     ) -> CopilotApplicationPack:
         """Generate tailored application pack via LLM Gateway with deterministic fallback, matching candidate resume."""
         skills_str = ", ".join(extracted_skills) if extracted_skills else "General software engineering stack"
@@ -89,7 +90,14 @@ Generate:
 3. interview_qa: 3 high-probability technical interview questions for this specific role, with concise talking points.
 Output strictly valid JSON conforming to the schema."""
 
-        configured_adapters = self.gateway.get_configured_adapters()
+        configured_adapters = await self.gateway.get_active_adapters(session)
+        if not configured_adapters:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=503,
+                detail="No active AI provider is configured or enabled. Please add or toggle on an API key in Profile -> API settings.",
+            )
+
         for adapter in configured_adapters:
             if self.gateway.is_in_cooldown(adapter.provider_name):
                 continue
@@ -133,40 +141,31 @@ Output strictly valid JSON conforming to the schema."""
                                 txt = res.json()["choices"][0]["message"]["content"]
                                 return CopilotApplicationPack.model_validate(clean_and_parse_json(txt))
 
+                        elif adapter.provider_name == "OLLAMA" and getattr(adapter, "base_url", None):
+                            endpoint = f"{adapter.base_url}/api/chat"
+                            res = await client.post(
+                                endpoint,
+                                json={
+                                    "model": adapter.model_name,
+                                    "messages": [
+                                        {"role": "system", "content": COPILOT_SYSTEM_PROMPT},
+                                        {"role": "user", "content": user_prompt},
+                                    ],
+                                    "format": "json",
+                                    "stream": False,
+                                },
+                            )
+                            if res.status_code == 200:
+                                txt = res.json().get("message", {}).get("content", "{}")
+                                return CopilotApplicationPack.model_validate(clean_and_parse_json(txt))
+
             except Exception as exc:
                 logger.warning("Copilot provider generation failed, cascading", provider=adapter.provider_name, error=str(exc))
                 continue
 
-        # Fallback synthesizer: produces clean, high-quality personalized application assets
-        bullets = [
-            f"Engineered high-throughput backend services and APIs utilizing {extracted_skills[0] if extracted_skills else 'Python'} and asynchronous design patterns.",
-            f"Designed automated data ingestion workflows and composite caching mechanisms, accelerating query response latency.",
-            f"Collaborated on production microservices with containerized deployment, automated testing, and comprehensive logging.",
-        ]
-        cover = (
-            f"Hi Hiring Team at {company},\n\n"
-            f"I am writing to express my strong interest in the {title} opening. "
-            f"With a strong foundation in {' and '.join(extracted_skills[:2]) if extracted_skills else 'Python and backend development'}, "
-            f"I have built production-grade APIs, automated intelligence pipelines, and reliable services. "
-            f"I am excited about {company}'s technical trajectory and look forward to contributing impactful, maintainable code.\n\n"
-            f"Best regards,\n{cand_name}"
-        )
-        qa = [
-            InterviewQuestion(
-                question=f"How would you architect a backend service in this role to handle asynchronous workloads?",
-                talking_points="Discuss async event loops, background task management, non-blocking HTTP requests with httpx/asyncio, and transactional database commits.",
-            ),
-            InterviewQuestion(
-                question=f"What is your approach to handling database locking and high concurrency in {company}'s stack?",
-                talking_points="Highlight WAL (Write-Ahead Logging) mode, busy timeouts, connection pooling, and separating long-running network operations from write transactions.",
-            ),
-            InterviewQuestion(
-                question="How do you quickly ramp up on missing frameworks or technologies listed in this JD?",
-                talking_points="Emphasize rapid learning loops: reading official docs, building working proof-of-concepts, debugging stack traces, and applying clean design patterns.",
-            ),
-        ]
-        return CopilotApplicationPack(
-            tailored_bullets=bullets,
-            cover_note=cover,
-            interview_qa=qa,
+        # If all configured providers failed, raise error instead of generating fake demo assets
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to generate Application Copilot Pack. Configured LLM providers failed or encountered rate limits.",
         )

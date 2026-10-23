@@ -25,10 +25,11 @@ class OllamaAdapter(BaseLLMAdapter):
             model_name=model_name or settings.ollama_model,
             timeout=timeout or 30.0,
         )
-        self.base_url = (base_url or settings.ollama_base_url).rstrip("/")
+        raw_url = base_url or settings.ollama_base_url
+        self.base_url = raw_url.rstrip("/") if raw_url else None
 
     def is_configured(self) -> bool:
-        return bool(self.base_url)
+        return bool(self.base_url and self.base_url.strip())
 
     async def generate_assessment(
         self,

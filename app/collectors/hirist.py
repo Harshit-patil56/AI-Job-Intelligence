@@ -197,6 +197,10 @@ class HiristCollector(BaseCollector):
             max_exp = item.get("maxExp") or item.get("experience_max")
             card_content = item.get("card_text") or item.get("description") or title
 
+            min_sal = item.get("minSalary") or item.get("salary_min")
+            max_sal = item.get("maxSalary") or item.get("salary_max")
+            sal_text = item.get("salary") or item.get("salaryRangeText") or item.get("salary_text")
+
             raw_payload = {
                 "id": job_id,
                 "title": title,
@@ -205,6 +209,9 @@ class HiristCollector(BaseCollector):
                 "experience_min": min_exp,
                 "experience_max": max_exp,
                 "experience": item.get("experience") or (f"{min_exp}-{max_exp} years" if min_exp is not None else ""),
+                "salary_min": min_sal,
+                "salary_max": max_sal,
+                "salary_text": sal_text,
                 "content": card_content,
                 "public_url": job_url,
                 "source": "HIRIST",

@@ -53,12 +53,12 @@ class Settings(BaseSettings):
     llm_enabled: bool = True
     llm_timeout_seconds: float = 20.0
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-2.5-flash"
     groq_api_key: str | None = None
     groq_model: str = "llama-3.1-8b-instant"
     openrouter_api_key: str | None = None
     openrouter_model: str = "deepseek/deepseek-chat:free"
-    ollama_base_url: str = "http://localhost:11434"
+    ollama_base_url: str | None = None
     ollama_model: str = "llama3.2:3b"
 
 
